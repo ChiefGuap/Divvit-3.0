@@ -1,0 +1,8 @@
+node_modules
+.next
+.expo
+dist
+__pycache__
+.env
+.env.local
+.venv

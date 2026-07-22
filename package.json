@@ -1,0 +1,19 @@
+{
+  "name": "divvit",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "db:types": "supabase gen types typescript --local > packages/shared-types/src/database.types.ts"
+  },
+  "devDependencies": {
+    "supabase": "^1.180.0",
+    "turbo": "^2.0.0",
+    "typescript": "^5.0.0"
+  }
+}
