@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Daily Divvit Discover agent (macOS launchd).
+
+  Edit ProgramArguments to your absolute repo path, then:
+    cp scripts/com.divvit.discover.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.divvit.discover.plist
+
+  Check it:   launchctl list | grep divvit
+  Run now:    launchctl start com.divvit.discover
+  Stop:       launchctl unload ~/Library/LaunchAgents/com.divvit.discover.plist
+
+  RunAtLoad is false on purpose — loading the job should not kick off a harvest
+  and start spending TwelveLabs minutes. Use `launchctl start` to test.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.divvit.discover</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/theraq17/Documents/GitHub/Divvit-3.0/scripts/discover-daily.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/theraq17/Documents/GitHub/Divvit-3.0</string>
+
+  <!-- 07:00 local, daily. If the Mac is asleep, launchd runs it on wake. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>7</integer>
+    <key>Minute</key><integer>0</integer>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/theraq17/Documents/GitHub/Divvit-3.0/data/logs/launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/theraq17/Documents/GitHub/Divvit-3.0/data/logs/launchd.err.log</string>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>
