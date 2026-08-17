@@ -49,33 +49,55 @@ def _utcnow() -> str:
 
 # ------------------------------------------------------------------ relevance
 
-def video_mentions_cafe(cafe_name: str, video: DiscoveredVideo) -> bool:
+# Geography words that mark a video as plausibly local. Deliberately no bare
+# "ca" — it matches every "Commerce, CA" style byline in the country.
+GEO_HINTS = ("california", "socal", "orange county")
+
+
+def video_mentions_cafe(cafe_name: str, video: DiscoveredVideo,
+                        geo_terms: tuple[str, ...] = ()) -> bool:
     """Does this search result plausibly refer to *this* cafe?
 
     Keyword search is recall-first and returns plenty of videos about other
-    venues that share a word. The gate: every distinctive token of the cafe's
-    name appears in the title+description, or the whole name fuzzy-matches the
-    title. Precision matters more than recall here — a video about someone
-    else's cafe on a prospect's dashboard is the expensive failure, same as a
-    wrong venue attach.
+    venues that share a word — or the whole name. Precision matters more than
+    recall here: a video about someone else's cafe on a prospect's dashboard
+    is the expensive failure, same as a wrong venue attach.
+
+    Two-tier gate, measured into shape on the first live run:
+      * A name with 2+ distinctive tokens ("Hidden House Coffee") is unlikely
+        to collide; all tokens in title+description is enough.
+      * A single-token name ("Sergio's") collides with same-named businesses
+        nationwide — the live run attached a Miami Cuban restaurant and an
+        engagement-ring shop to one OC cafe. Those need the full name as a
+        word-bounded phrase AND a geographic cue (its city, or a
+        California/OC marker) in the text.
     """
     haystack = normalize(f"{video.title or ''} {video.description or ''}")
+    padded = f" {haystack} "
     # Single-character tokens are traps: "Sergio's" normalizes to
-    # ["sergio", "s"], and a bare "s" is in every English sentence — measured
-    # over-attaching 13 videos to one cafe before this guard existed.
+    # ["sergio", "s"], and a bare "s" is in every English sentence.
     tokens = [t for t in content_tokens(cafe_name) if len(t) >= 2]
     if len(tokens) >= 2 and all(t in haystack for t in tokens):
         return True
-    # Otherwise the full name must appear as a word-bounded phrase. Two
-    # variants because titles drop apostrophes both ways: "Sergio's" must
-    # match "Sergio's Cafe" (normalized "sergio s") and "Sergios Cafe"
-    # (collapsed "sergios") — but never "Sergio Santos". Deliberately NOT
-    # name_similarity(): its containment view is built for partial sign
-    # reads and happily scores "sergio s" inside "sergio santos vlog".
+
+    # Phrase match, two variants, because titles drop apostrophes both ways:
+    # "Sergio's" must match "Sergio's Cafe" (normalized "sergio s") and
+    # "Sergios Cafe" (collapsed "sergios") — but never "Sergio Santos".
+    # Deliberately NOT name_similarity(): its containment view is built for
+    # partial sign reads and scores "sergio s" inside "sergio santos vlog".
     base = normalize(cafe_name)
     collapsed = re.sub(r"\b(\w+) s\b", r"\1s", base)
-    padded = f" {haystack} "
-    return any(f" {variant} " in padded for variant in (base, collapsed))
+    if not any(f" {variant} " in padded for variant in (base, collapsed)):
+        return False
+
+    # Ambiguity is judged on the *raw* name, not the stopword-stripped one:
+    # "Hidden House Coffee" as a full phrase is distinctive even though
+    # "house" and "coffee" are generic; "Sergio's" ("sergio" + a 1-char
+    # remnant) is not, and only a geo cue can localize it.
+    if len([t for t in base.split() if len(t) >= 2]) >= 2:
+        return True
+    geo = [normalize(g) for g in (*geo_terms, *GEO_HINTS) if g and g.strip()]
+    return any(f" {g} " in padded for g in geo)
 
 
 def _is_noise(video: DiscoveredVideo) -> bool:
@@ -130,7 +152,8 @@ def collect_youtube(
             for video in connector.search(query):
                 if video.canonical_id in seen or _is_noise(video):
                     continue
-                if not video_mentions_cafe(cafe.name, video):
+                if not video_mentions_cafe(cafe.name, video,
+                                           geo_terms=(cafe.city, cafe.county)):
                     continue
                 video.intent = INTENT_BUSINESS
                 video.business_id = cafe.cafe_id

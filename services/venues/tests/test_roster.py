@@ -176,15 +176,22 @@ def test_relevance() -> None:
     check(not video_mentions_cafe("Neat Coffee",
                                   vid("my neat little apartment tour")),
           "shared single word does not attach someone else's video")
-    check(video_mentions_cafe("Sergio's", vid("Breakfast at Sergio's!")),
-          "possessive-named cafe still matches its own videos")
+    check(video_mentions_cafe("Sergio's",
+                              vid("Breakfast at Sergio's!", "Anaheim, California"),
+                              geo_terms=("Anaheim",)),
+          "possessive-named cafe matches its own geo-tagged videos")
+    check(video_mentions_cafe("Sergio's", vid("SERGIOS best spot in Anaheim"),
+                              geo_terms=("Anaheim",)),
+          "apostrophe-collapsed form with a city cue matches")
     check(not video_mentions_cafe("Sergio's",
-                                  vid("Sergio Ramos best moments")),
+                                  vid("Sergio's Cuban Restaurant croqueta day"),
+                                  geo_terms=("Anaheim",)),
+          "same-named business elsewhere is rejected without a geo cue")
+    check(not video_mentions_cafe("Sergio's",
+                                  vid("Sergio Ramos best moments in California")),
           "possessive name does not match via a stray single-char token")
     check(not video_mentions_cafe("Sergio's", vid("sergio santos vlog")),
           "phrase matching is word-bounded, not raw substring")
-    check(video_mentions_cafe("Sergio's", vid("SERGIOS best breakfast ever")),
-          "apostrophe-collapsed title form still matches")
 
 
 def test_yelp_degrades() -> None:
