@@ -11,5 +11,10 @@ first paid API call.
 """
 
 from .fingerprint import VideoFingerprint, fingerprint_file, fingerprint_distance
+from .store import IntakeStore
+from .pipeline import IntakePipeline, SubmissionOutcome
+from .venue_check import DirectScreener, VenueGate
 
-__all__ = ["VideoFingerprint", "fingerprint_file", "fingerprint_distance"]
+__all__ = ["VideoFingerprint", "fingerprint_file", "fingerprint_distance",
+           "IntakeStore", "IntakePipeline", "SubmissionOutcome",
+           "DirectScreener", "VenueGate"]
