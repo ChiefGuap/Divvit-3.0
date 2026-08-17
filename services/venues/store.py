@@ -1,0 +1,332 @@
+"""SQLite roster store — cafes, their measured signals, brand health snapshots.
+
+Same conventions as Discover's CorpusStore, deliberately: local SQLite while
+the schema churns, additive self-migration on open (never a manual DB step),
+dedupe on a stable key, and `export_rows()` as the Postgres migration path.
+
+Three tables:
+
+  cafes                   the roster. Keyed `osm:<type>:<id>`. Chains are kept
+                          with `is_chain=1` and a reason — evidence, not noise.
+  cafe_signals            one row per cafe once a metrics pass has *attempted*
+                          it. A column that is NULL means "not measured";
+                          a JSON payload with zeros means "measured, zero".
+                          The existence of the row is what makes re-runs
+                          resume instead of restart.
+  brand_health_snapshots  append-only score history. Brand health is a time
+                          series — "are we improving" is the renewal question,
+                          and an overwritten score cannot answer it.
+"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Any, Iterator, Optional
+
+from .roster import CafeRecord
+
+DEFAULT_DB = Path("data/venues.db")
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS cafes (
+    cafe_id          TEXT PRIMARY KEY,      -- osm:<type>:<id>
+    name             TEXT NOT NULL,
+    lat              REAL,
+    lon              REAL,
+    city             TEXT,
+    street           TEXT,
+    housenumber      TEXT,
+    postcode         TEXT,
+    website          TEXT,
+    phone            TEXT,
+    instagram        TEXT,
+    facebook         TEXT,
+    tiktok           TEXT,
+    cuisine          TEXT,
+    opening_hours    TEXT,
+    county           TEXT,
+    source           TEXT DEFAULT 'overpass',
+    is_chain         INTEGER NOT NULL DEFAULT 0,
+    exclusion_reason TEXT,
+    tags             TEXT,                  -- raw OSM tags, JSON
+    first_seen       TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at       TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_cafes_chain ON cafes(is_chain);
+CREATE INDEX IF NOT EXISTS idx_cafes_city  ON cafes(city);
+
+CREATE TABLE IF NOT EXISTS cafe_signals (
+    cafe_id      TEXT PRIMARY KEY,
+    collected_at TEXT,
+    youtube      TEXT,   -- JSON summary; NULL = never measured
+    yelp         TEXT,   -- JSON {rating, review_count, ...}; NULL = absent
+    errors       TEXT    -- JSON array of what degraded during collection
+);
+
+CREATE TABLE IF NOT EXISTS brand_health_snapshots (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    cafe_id      TEXT NOT NULL,
+    captured_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+    score        REAL,
+    confidence   TEXT,
+    components   TEXT,   -- JSON breakdown: raw value + percentile + weight
+    assumptions  TEXT    -- JSON: weights, cohort size, coverage, caveats
+);
+
+CREATE INDEX IF NOT EXISTS idx_bh_cafe ON brand_health_snapshots(cafe_id);
+"""
+
+_CAFE_COLUMNS = [
+    "cafe_id", "name", "lat", "lon", "city", "street", "housenumber",
+    "postcode", "website", "phone", "instagram", "facebook", "tiktok",
+    "cuisine", "opening_hours", "county", "source", "is_chain",
+    "exclusion_reason", "tags",
+]
+
+
+class RosterStore:
+    def __init__(self, path: Path | str = DEFAULT_DB):
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._init_schema()
+
+    @contextmanager
+    def _conn(self) -> Iterator[sqlite3.Connection]:
+        conn = sqlite3.connect(self.path)
+        conn.row_factory = sqlite3.Row
+        try:
+            yield conn
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _init_schema(self) -> None:
+        with self._conn() as conn:
+            conn.executescript(SCHEMA)
+            # Additive migration, mirroring CorpusStore: rosters created before
+            # a column existed must upgrade themselves on open.
+            existing = {r["name"] for r in conn.execute("PRAGMA table_info(cafes)")}
+            for column, decl in (("county", "TEXT"), ("tiktok", "TEXT"),
+                                 ("opening_hours", "TEXT")):
+                if column not in existing:
+                    conn.execute(f"ALTER TABLE cafes ADD COLUMN {column} {decl}")
+
+    # ------------------------------------------------------------- roster
+    def upsert_cafe(self, cafe: CafeRecord) -> bool:
+        """Insert or refresh; returns True for a new row. Refresh updates the
+        OSM-derived fields but preserves `first_seen`."""
+        row = cafe.to_dict()
+        row["tags"] = json.dumps(row.get("tags") or {})
+        row["is_chain"] = 1 if cafe.is_chain else 0
+        with self._conn() as conn:
+            existing = conn.execute(
+                "SELECT cafe_id FROM cafes WHERE cafe_id = ?",
+                (cafe.cafe_id,)).fetchone()
+            if existing is None:
+                conn.execute(
+                    f"INSERT INTO cafes ({','.join(_CAFE_COLUMNS)}) "
+                    f"VALUES ({','.join('?' * len(_CAFE_COLUMNS))})",
+                    [row[c] for c in _CAFE_COLUMNS])
+                return True
+            updatable = [c for c in _CAFE_COLUMNS if c != "cafe_id"]
+            conn.execute(
+                f"UPDATE cafes SET {','.join(f'{c}=?' for c in updatable)},"
+                " updated_at=CURRENT_TIMESTAMP WHERE cafe_id=?",
+                [row[c] for c in updatable] + [cafe.cafe_id])
+            return False
+
+    def upsert_many(self, cafes: list[CafeRecord]) -> tuple[int, int]:
+        total = new = 0
+        for cafe in cafes:
+            total += 1
+            if self.upsert_cafe(cafe):
+                new += 1
+        return total, new
+
+    def cafes(self, include_chains: bool = False, city: str = "",
+              limit: Optional[int] = None) -> list[CafeRecord]:
+        """Independents by default, in deterministic cafe_id order — the order
+        the metrics pass walks, which is what makes resume meaningful."""
+        sql = "SELECT * FROM cafes WHERE 1=1"
+        params: list[Any] = []
+        if not include_chains:
+            sql += " AND is_chain = 0"
+        if city:
+            sql += " AND lower(city) = ?"
+            params.append(city.strip().lower())
+        sql += " ORDER BY cafe_id"
+        if limit:
+            sql += " LIMIT ?"
+            params.append(limit)
+        with self._conn() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [self._cafe_from_row(r) for r in rows]
+
+    def get_cafe(self, cafe_id: str) -> Optional[CafeRecord]:
+        with self._conn() as conn:
+            row = conn.execute("SELECT * FROM cafes WHERE cafe_id = ?",
+                               (cafe_id,)).fetchone()
+        return self._cafe_from_row(row) if row else None
+
+    def find_cafe(self, name: str) -> Optional[CafeRecord]:
+        """Loose name lookup for the CLI — exact id wins, else first name hit."""
+        by_id = self.get_cafe(name)
+        if by_id:
+            return by_id
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM cafes WHERE lower(name) LIKE ? "
+                "ORDER BY is_chain, cafe_id LIMIT 1",
+                (f"%{name.strip().lower()}%",)).fetchone()
+        return self._cafe_from_row(row) if row else None
+
+    def counts(self) -> dict[str, Any]:
+        with self._conn() as conn:
+            total = conn.execute("SELECT COUNT(*) c FROM cafes").fetchone()["c"]
+            chains = conn.execute(
+                "SELECT COUNT(*) c FROM cafes WHERE is_chain = 1").fetchone()["c"]
+            with_site = conn.execute(
+                "SELECT COUNT(*) c FROM cafes WHERE is_chain = 0"
+                " AND website != ''").fetchone()["c"]
+            with_ig = conn.execute(
+                "SELECT COUNT(*) c FROM cafes WHERE is_chain = 0"
+                " AND instagram != ''").fetchone()["c"]
+            measured = conn.execute(
+                "SELECT COUNT(*) c FROM cafe_signals").fetchone()["c"]
+            top_cities = {r["city"]: r["c"] for r in conn.execute(
+                "SELECT city, COUNT(*) c FROM cafes WHERE is_chain = 0"
+                " AND city != '' GROUP BY city ORDER BY c DESC LIMIT 12")}
+        return {"total": total, "independent": total - chains, "chains": chains,
+                "with_website": with_site, "with_instagram": with_ig,
+                "measured": measured, "top_cities": top_cities}
+
+    # ------------------------------------------------------------ signals
+    def set_signals(self, cafe_id: str, youtube: Optional[dict] = None,
+                    yelp: Optional[dict] = None,
+                    errors: Optional[list[str]] = None,
+                    collected_at: str = "") -> None:
+        """Record a metrics attempt. None stays NULL — absent, not zero."""
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT INTO cafe_signals (cafe_id, collected_at, youtube,"
+                " yelp, errors) VALUES (?,?,?,?,?)"
+                " ON CONFLICT(cafe_id) DO UPDATE SET"
+                " collected_at=excluded.collected_at,"
+                " youtube=COALESCE(excluded.youtube, cafe_signals.youtube),"
+                " yelp=COALESCE(excluded.yelp, cafe_signals.yelp),"
+                " errors=excluded.errors",
+                (cafe_id, collected_at,
+                 json.dumps(youtube) if youtube is not None else None,
+                 json.dumps(yelp) if yelp is not None else None,
+                 json.dumps(errors) if errors else None))
+
+    def get_signals(self, cafe_id: str) -> Optional[dict[str, Any]]:
+        with self._conn() as conn:
+            row = conn.execute("SELECT * FROM cafe_signals WHERE cafe_id = ?",
+                               (cafe_id,)).fetchone()
+        return self._signals_from_row(row) if row else None
+
+    def all_signals(self) -> dict[str, dict[str, Any]]:
+        with self._conn() as conn:
+            rows = conn.execute("SELECT * FROM cafe_signals").fetchall()
+        return {r["cafe_id"]: self._signals_from_row(r) for r in rows}
+
+    def pending_cafes(self, limit: Optional[int] = None) -> list[CafeRecord]:
+        """Independents with no metrics attempt yet, in cafe_id order.
+
+        This is the resume contract: the metrics pass takes `pending_cafes()`,
+        so a re-run continues where the last one stopped instead of
+        re-measuring cafe #1 forever.
+        """
+        sql = ("SELECT c.* FROM cafes c LEFT JOIN cafe_signals s"
+               " ON s.cafe_id = c.cafe_id"
+               " WHERE c.is_chain = 0 AND s.cafe_id IS NULL"
+               " ORDER BY c.cafe_id")
+        params: list[Any] = []
+        if limit:
+            sql += " LIMIT ?"
+            params.append(limit)
+        with self._conn() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [self._cafe_from_row(r) for r in rows]
+
+    # ---------------------------------------------------------- snapshots
+    def record_snapshot(self, cafe_id: str, score: Optional[float],
+                        confidence: str, components: dict[str, Any],
+                        assumptions: dict[str, Any],
+                        captured_at: str = "") -> None:
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT INTO brand_health_snapshots"
+                " (cafe_id, captured_at, score, confidence, components,"
+                " assumptions) VALUES (?,COALESCE(NULLIF(?,''),"
+                " CURRENT_TIMESTAMP),?,?,?,?)",
+                (cafe_id, captured_at, score, confidence,
+                 json.dumps(components), json.dumps(assumptions)))
+
+    def latest_snapshots(self) -> dict[str, dict[str, Any]]:
+        """Most recent snapshot per cafe."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT s.* FROM brand_health_snapshots s"
+                " JOIN (SELECT cafe_id, MAX(id) mid FROM brand_health_snapshots"
+                "       GROUP BY cafe_id) latest"
+                " ON latest.mid = s.id").fetchall()
+        out = {}
+        for r in rows:
+            d = dict(r)
+            for c in ("components", "assumptions"):
+                if d.get(c):
+                    try:
+                        d[c] = json.loads(d[c])
+                    except (TypeError, ValueError):
+                        d[c] = None
+            out[r["cafe_id"]] = d
+        return out
+
+    # ------------------------------------------------------------- export
+    def export_rows(self) -> list[dict[str, Any]]:
+        """Roster + signals + latest score as plain dicts — JSON export and
+        the eventual Supabase backfill shape."""
+        signals = self.all_signals()
+        snapshots = self.latest_snapshots()
+        out = []
+        for cafe in self.cafes(include_chains=True):
+            d = cafe.to_dict()
+            d["signals"] = signals.get(cafe.cafe_id)
+            snap = snapshots.get(cafe.cafe_id)
+            d["brand_health"] = ({"score": snap["score"],
+                                  "confidence": snap["confidence"],
+                                  "components": snap["components"],
+                                  "captured_at": snap["captured_at"]}
+                                 if snap else None)
+            out.append(d)
+        return out
+
+    # ---------------------------------------------------------- row -> obj
+    @staticmethod
+    def _cafe_from_row(row: sqlite3.Row) -> CafeRecord:
+        d = dict(row)
+        d.pop("first_seen", None)
+        d.pop("updated_at", None)
+        d["is_chain"] = bool(d.get("is_chain"))
+        try:
+            d["tags"] = json.loads(d.get("tags") or "{}")
+        except (TypeError, ValueError):
+            d["tags"] = {}
+        return CafeRecord.from_dict(d)
+
+    @staticmethod
+    def _signals_from_row(row: sqlite3.Row) -> dict[str, Any]:
+        d = dict(row)
+        for c in ("youtube", "yelp", "errors"):
+            if d.get(c):
+                try:
+                    d[c] = json.loads(d[c])
+                except (TypeError, ValueError):
+                    d[c] = None
+        return d
