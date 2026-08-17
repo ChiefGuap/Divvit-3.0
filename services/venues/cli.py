@@ -39,7 +39,8 @@ from services.discover.store import DEFAULT_DB as CORPUS_DB        # noqa: E402
 from services.venues.brand_health import score_roster              # noqa: E402
 from services.venues.overpass import (                             # noqa: E402
     DEFAULT_CACHE_DIR, OverpassError, fetch_county_cafes)
-from services.venues.roster import parse_overpass                  # noqa: E402
+from services.venues.roster import (                               # noqa: E402
+    flag_local_chains, parse_overpass)
 from services.venues.social import (                               # noqa: E402
     cafe_business_target, run_metrics_pass)
 from services.venues.store import DEFAULT_DB, RosterStore          # noqa: E402
@@ -64,6 +65,12 @@ def cmd_roster(args) -> int:
         return 2
 
     cafes, tally = parse_overpass(payload, county=args.county)
+    local_chains = flag_local_chains(cafes)
+    if local_chains:
+        tally["independent"] -= local_chains
+        tally["chain"] += local_chains
+        print(f"[roster] {local_chains} multi-location brands flagged "
+              "beyond tag/blocklist exclusion")
     total, new = store.upsert_many(cafes)
     print(f"[roster] {tally['elements']} OSM elements -> "
           f"{tally['independent']} independent + {tally['chain']} chain "

@@ -38,7 +38,7 @@ from services.discover.models import DiscoveredVideo, INTENT_BUSINESS
 from services.discover.queries import BusinessTarget, business_queries
 from services.discover.store import CorpusStore
 
-from .resolver import content_tokens, name_similarity, normalize
+from .resolver import content_tokens, normalize
 from .roster import CafeRecord
 from .store import RosterStore
 
@@ -60,14 +60,22 @@ def video_mentions_cafe(cafe_name: str, video: DiscoveredVideo) -> bool:
     wrong venue attach.
     """
     haystack = normalize(f"{video.title or ''} {video.description or ''}")
-    tokens = content_tokens(cafe_name)
+    # Single-character tokens are traps: "Sergio's" normalizes to
+    # ["sergio", "s"], and a bare "s" is in every English sentence — measured
+    # over-attaching 13 videos to one cafe before this guard existed.
+    tokens = [t for t in content_tokens(cafe_name) if len(t) >= 2]
     if len(tokens) >= 2 and all(t in haystack for t in tokens):
         return True
-    # One distinctive token ("Neat" of "Neat Coffee") appears in far too many
-    # unrelated titles — require the full name as a phrase instead.
-    if normalize(cafe_name) in haystack:
-        return True
-    return name_similarity(video.title or "", cafe_name) >= 0.8
+    # Otherwise the full name must appear as a word-bounded phrase. Two
+    # variants because titles drop apostrophes both ways: "Sergio's" must
+    # match "Sergio's Cafe" (normalized "sergio s") and "Sergios Cafe"
+    # (collapsed "sergios") — but never "Sergio Santos". Deliberately NOT
+    # name_similarity(): its containment view is built for partial sign
+    # reads and happily scores "sergio s" inside "sergio santos vlog".
+    base = normalize(cafe_name)
+    collapsed = re.sub(r"\b(\w+) s\b", r"\1s", base)
+    padded = f" {haystack} "
+    return any(f" {variant} " in padded for variant in (base, collapsed))
 
 
 def _is_noise(video: DiscoveredVideo) -> bool:
@@ -183,14 +191,20 @@ def collect_yelp(
 ) -> tuple[Optional[dict[str, Any]], Optional[str]]:
     """(yelp signal, error). One request to the public search page; graceful
     on every failure mode. Absent is None — a blocked scrape must never read
-    as a zero-star cafe."""
-    if not cafe.city:
-        return None, "yelp: no city on the roster record to search in"
+    as a zero-star cafe.
+
+    Location falls back to the county: 218 of the 377 OC independents arrived
+    from OSM with no `addr:city`, and skipping Yelp for all of them would
+    throw away the review component for most of the roster.
+    """
+    location = cafe.city or cafe.county
+    if not location:
+        return None, "yelp: no city or county on the roster record to search in"
 
     get = _get or requests.get
     url = ("https://www.yelp.com/search?find_desc="
            + requests.utils.quote(cafe.name)
-           + "&find_loc=" + requests.utils.quote(f"{cafe.city}, CA"))
+           + "&find_loc=" + requests.utils.quote(f"{location}, CA"))
     try:
         response = get(url, headers={"User-Agent": YELP_UA,
                                      "Accept-Language": "en-US,en;q=0.9"},
@@ -223,6 +237,13 @@ def collect_yelp(
             "source_url": url, "collected_at": _utcnow()}, None
 
 
+# After this many consecutive 403s the Yelp circuit opens for the rest of the
+# run: the block is IP-level, not per-cafe (measured 2026-08-16 — 403 on the
+# first three cafes straight), so continuing is 350+ pointless requests
+# against a host that already said no.
+YELP_CIRCUIT_403S = 5
+
+
 # -------------------------------------------------------------- metrics pass
 
 def run_metrics_pass(
@@ -244,6 +265,7 @@ def run_metrics_pass(
     pending = roster.pending_cafes(limit=limit)
     tally = {"attempted": 0, "youtube_measured": 0, "videos_found": 0,
              "yelp_measured": 0, "yelp_absent": 0}
+    yelp_403_streak = 0
 
     for i, cafe in enumerate(pending, 1):
         tally["attempted"] += 1
@@ -259,9 +281,10 @@ def run_metrics_pass(
             on_status("  youtube: measurement failed")
 
         yelp = None
-        if not skip_yelp:
+        if not skip_yelp and yelp_403_streak < YELP_CIRCUIT_403S:
             yelp, yelp_error = collect_yelp(cafe)
             if yelp is not None:
+                yelp_403_streak = 0
                 tally["yelp_measured"] += 1
                 on_status(f"  yelp: {yelp['rating']} stars, "
                           f"{yelp['review_count']} reviews")
@@ -269,6 +292,14 @@ def run_metrics_pass(
                 tally["yelp_absent"] += 1
                 errors.append(yelp_error or "yelp: absent")
                 on_status(f"  {yelp_error}")
+                if "403" in (yelp_error or ""):
+                    yelp_403_streak += 1
+                    if yelp_403_streak >= YELP_CIRCUIT_403S:
+                        on_status("  yelp: circuit open — IP-level block, "
+                                  "skipping yelp for the rest of this run")
+        elif not skip_yelp:
+            tally["yelp_absent"] += 1
+            errors.append("yelp: skipped (circuit open after repeated 403s)")
 
         roster.set_signals(cafe.cafe_id, youtube=youtube, yelp=yelp,
                            errors=errors, collected_at=_utcnow())

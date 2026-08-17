@@ -200,6 +200,32 @@ def parse_overpass(payload: dict[str, Any], county: str = ""
     return cafes, tally
 
 
+def flag_local_chains(cafes: list[CafeRecord], min_locations: int = 3
+                      ) -> int:
+    """Third exclusion test, run over the whole roster: the same name at
+    `min_locations`+ sites in one county is a multi-location brand, whatever
+    its tags say. Caught live: Bodhi Leaf Coffee Traders (7 OC locations) and
+    Lollicup (a franchise) both arrived brand-tag-free and off-blocklist.
+
+    Two locations stays independent — a cafe that opened a second shop is
+    still exactly the prospect Divvit wants.
+    """
+    tally: dict[str, int] = {}
+    for cafe in cafes:
+        if not cafe.is_chain:
+            tally[normalize(cafe.name)] = tally.get(normalize(cafe.name), 0) + 1
+
+    flagged = 0
+    for cafe in cafes:
+        count = tally.get(normalize(cafe.name), 0)
+        if not cafe.is_chain and count >= min_locations:
+            cafe.is_chain = True
+            cafe.exclusion_reason = (f"{count} same-name locations in county "
+                                     "(multi-location brand)")
+            flagged += 1
+    return flagged
+
+
 def roster_to_json(cafes: Iterable[CafeRecord]) -> str:
     return json.dumps({"cafes": [c.to_dict() for c in cafes]},
                       indent=2, ensure_ascii=False)

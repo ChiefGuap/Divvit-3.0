@@ -24,7 +24,8 @@ from services.venues.brand_health import (                          # noqa: E402
     WEIGHTS, raw_components, score_roster)
 from services.venues.overpass import fetch_county_cafes             # noqa: E402
 from services.venues.roster import (                                # noqa: E402
-    CafeRecord, chain_reason, element_to_cafe, parse_overpass)
+    CafeRecord, chain_reason, element_to_cafe, flag_local_chains,
+    parse_overpass)
 from services.venues.social import (                                # noqa: E402
     collect_yelp, video_mentions_cafe)
 from services.venues.store import RosterStore                       # noqa: E402
@@ -69,6 +70,16 @@ def test_chain_exclusion() -> None:
           "word-boundary matching: blocklist fragment inside a word is not a hit")
     check(chain_reason({"name": "Kean Coffee"}) is None,
           "local roaster with chain-ish name passes")
+
+    trio = [element_to_cafe(node(i, name="Bodhi Leaf Coffee Traders"))
+            for i in range(3)]
+    pair = [element_to_cafe(node(i + 10, name="Neat Coffee"))
+            for i in range(2)]
+    flagged = flag_local_chains(trio + pair)
+    check(flagged == 3 and all(c.is_chain for c in trio),
+          "3+ same-name locations flagged as a multi-location brand")
+    check(not any(c.is_chain for c in pair),
+          "two locations is still an independent")
 
 
 # ----------------------------------------------------------------- parsing
@@ -165,6 +176,15 @@ def test_relevance() -> None:
     check(not video_mentions_cafe("Neat Coffee",
                                   vid("my neat little apartment tour")),
           "shared single word does not attach someone else's video")
+    check(video_mentions_cafe("Sergio's", vid("Breakfast at Sergio's!")),
+          "possessive-named cafe still matches its own videos")
+    check(not video_mentions_cafe("Sergio's",
+                                  vid("Sergio Ramos best moments")),
+          "possessive name does not match via a stray single-char token")
+    check(not video_mentions_cafe("Sergio's", vid("sergio santos vlog")),
+          "phrase matching is word-bounded, not raw substring")
+    check(video_mentions_cafe("Sergio's", vid("SERGIOS best breakfast ever")),
+          "apostrophe-collapsed title form still matches")
 
 
 def test_yelp_degrades() -> None:
@@ -193,6 +213,13 @@ def test_yelp_degrades() -> None:
     homeless = CafeRecord(cafe_id="osm:node:9", name="No City Cafe")
     signal, err = collect_yelp(homeless, _get=lambda *a, **k: FakeResponse(200, html))
     check(signal is None and "city" in err, "no city on record -> no search")
+
+    county_only = CafeRecord(cafe_id="osm:node:10", name="Hidden House Coffee",
+                             county="Orange County")
+    signal, err = collect_yelp(county_only,
+                               _get=lambda *a, **k: FakeResponse(200, html))
+    check(signal is not None and "Orange%20County" in signal["source_url"],
+          "missing addr:city falls back to a county-level search")
 
 
 # ------------------------------------------------------------ brand health
