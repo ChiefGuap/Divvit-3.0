@@ -53,10 +53,14 @@ MAX_OUTPUT_TOKENS = 2000  # screening schema is bigger than classify's; >512 flo
 
 # Corpus corroboration thresholds. Evidence strings come from Pegasus reading
 # pixels, so comparison uses the same OCR-tolerant similarity the resolver
-# uses. 0.6 aligns with a solid partial name match; 0.3 is below anything two
-# reads of the same sign produce.
+# uses. 0.6 aligns with a solid partial name match. The contradiction line
+# sits at 0.45 because that similarity's token alignment is generous on
+# unrelated names — services/venues/verify.py measured "Bronx Pizza" against
+# "The Cauldron Ice Cream" at 0.41, so a cutoff of 0.3 would call obvious
+# mismatches "neutral" (observed: "BORA HOUSE neon sign" vs "Cauldron Ice
+# Cream" scores 0.35).
 CORROBORATE_THRESHOLD = 0.60
-CONTRADICT_THRESHOLD = 0.30
+CONTRADICT_THRESHOLD = 0.45
 # One corpus video agreeing could be one mistake; contradiction is only
 # declared when at least two independent corpus videos had readable evidence.
 MIN_CORPUS_VIDEOS_FOR_CONTRADICTION = 2
