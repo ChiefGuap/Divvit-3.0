@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS discovered_videos (
     screening         TEXT,           -- JSON object, null until screened
     roi               TEXT,           -- JSON object, null until scored
     style             TEXT,           -- JSON object, null until style-extracted
+    classification    TEXT,           -- JSON object, null until classified
     updated_at        TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -98,11 +99,11 @@ _COLUMNS = [
     "width", "height",
     "creator", "metrics", "connector", "intent", "business_id", "source_query",
     "query_tags", "discovered_at", "rights_status", "local_path", "screening", "roi",
-    "style",
+    "style", "classification",
 ]
 
 _JSON_COLUMNS = {"hashtags", "creator", "metrics", "query_tags", "screening",
-                 "roi", "style"}
+                 "roi", "style", "classification"}
 
 
 class CorpusStore:
@@ -129,7 +130,7 @@ class CorpusStore:
             existing = {r["name"] for r in
                         conn.execute("PRAGMA table_info(discovered_videos)")}
             for column, decl in (("width", "INTEGER"), ("height", "INTEGER"),
-                                 ("style", "TEXT")):
+                                 ("style", "TEXT"), ("classification", "TEXT")):
                 if column not in existing:
                     conn.execute(
                         f"ALTER TABLE discovered_videos ADD COLUMN {column} {decl}")
@@ -145,8 +146,8 @@ class CorpusStore:
         row = self._to_row(video)
         with self._conn() as conn:
             existing = conn.execute(
-                "SELECT rights_status, local_path, screening, roi, style"
-                " FROM discovered_videos WHERE canonical_id = ?",
+                "SELECT rights_status, local_path, screening, roi, style,"
+                " classification FROM discovered_videos WHERE canonical_id = ?",
                 (video.canonical_id,)).fetchone()
 
             if existing is None:
@@ -164,6 +165,7 @@ class CorpusStore:
             row["screening"] = row["screening"] or existing["screening"]
             row["roi"] = row["roi"] or existing["roi"]
             row["style"] = row["style"] or existing["style"]
+            row["classification"] = row["classification"] or existing["classification"]
 
             updatable = [c for c in _COLUMNS if c != "canonical_id"]
             conn.execute(

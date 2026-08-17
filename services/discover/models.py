@@ -123,6 +123,10 @@ class DiscoveredVideo:
     # Craft signals from style.py: on-screen text, audio treatment, cut rhythm,
     # shot order, tone. This is what teaches Create how the format is *made*.
     style: Optional[dict[str, Any]] = None
+    # Five-way category from services/classify. Separate from screening's own
+    # content_type: that vocabulary predates the taxonomy and a video can be
+    # relabelled without paying to re-index it.
+    classification: Optional[dict[str, Any]] = None
 
     # ------------------------------------------------------------- identity
     @property

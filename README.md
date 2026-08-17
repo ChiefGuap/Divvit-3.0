@@ -7,6 +7,7 @@ Two halves of the same pipeline:
 | **Screening AI** (`screening.py`, this file) | Screens user-submitted videos before they reach a business's Collection |
 | **[Discover](services/discover/README.md)** (`services/discover/`) | Harvests public cafe/restaurant videos, scores which formats perform, and feeds the best into screening — with a daily agent that runs the whole loop unattended |
 | **[Create](services/create/README.md)** (`services/create/`) | Editing AI: assembles Collection clips into a postable vertical video, shaped by Discover's best-performing format, moments picked by TwelveLabs search; Instagram Reels publish path (dry-run by default) |
+| **[Classify](services/classify/README.md)** (`services/classify/`) | The five-category video model (`review`, `montage`, `aesthetic`, `venue_vibe`, `menu_item`) — Pegasus labels the corpus as teacher so a local VideoMAE student can be trained on it |
 
 ---
 
