@@ -43,8 +43,8 @@ Outputs mirror Discover's conventions:
 
 One bounded Overpass query (`amenity=cafe` ∪ `shop=coffee` ∪ `shop=tea` ∪
 coffee/boba `fast_food`) against the county admin boundary returned **698 OSM
-elements → 684 named venues → 360 independents** after chain exclusion
-(324 chains excluded, 14 nameless elements dropped). The raw response is
+elements → 684 named venues → 357 independents** after chain exclusion
+(327 chains excluded, 14 nameless elements dropped). The raw response is
 cached; a re-run costs Overpass nothing.
 
 Chain exclusion is three independent tests, any of which excludes:
@@ -57,6 +57,12 @@ Chain exclusion is three independent tests, any of which excludes:
    a brand whatever its tags say. This caught what the first two missed:
    Bodhi Leaf Coffee Traders (7 locations) and Lollicup arrived with no brand
    tag and off-blocklist. Two locations stays independent.
+
+No test catches a national chain with a *single* local site and no brand tag
+— Bluestone Lane and Kolache Factory both leaked into the first live ranking
+and are now blocklisted by name. The durable fix is checking names against an
+external brand register (e.g. the OSM Name Suggestion Index), not a longer
+hand list.
 
 Excluded cafes are stored with `is_chain=1` and the reason, not dropped —
 "how many chains did we filter and why" stays answerable.
@@ -152,5 +158,6 @@ restarts instead of resuming.
   without it.
 - **Instagram anything** — Graph API. The roster already carries handles for
   17 cafes as seeds.
-- **YouTube at scale** — yt-dlp search works keyless but slowly (~20–40s per
-  cafe with enrichment); the YouTube Data API covers ~30 cafes/day/key.
+- **YouTube at scale** — yt-dlp search works keyless at roughly 10–20s per
+  cafe (two searches + up to three enrich calls); the compliant YouTube Data
+  API path covers ~30 cafes/day on a default-quota key.

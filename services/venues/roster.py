@@ -42,7 +42,10 @@ CHAIN_BLOCKLIST = (
     "coffee bean and tea leaf",
     # bakery-cafe chains
     "85 c", "85c", "panera", "krispy kreme", "einstein bros", "paris baguette",
-    "tous les jours", "corner bakery", "le pain quotidien",
+    "tous les jours", "corner bakery", "le pain quotidien", "kolache factory",
+    # single-local-site national chains the multi-location test cannot see
+    # (both leaked into the first live ranking before this entry)
+    "bluestone lane",
     # boba / tea chains (heavy OC presence)
     "sharetea", "kung fu tea", "ding tea", "boba time", "gong cha", "chatime",
     "happy lemon", "tp tea", "7 leaves", "tapioca express", "omomo",
