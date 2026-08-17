@@ -29,6 +29,16 @@ VENUE_VIBE = "venue_vibe"
 MENU_ITEM = "menu_item"
 UNCLASSIFIED = "unclassified"
 
+# Not one of the five, and deliberately not in CATEGORIES: harvested corpora
+# contain video that is not about food or a venue at all. Without somewhere to
+# put it, a five-way forced choice labels a man dancing in his living room
+# `venue_vibe` with high confidence — measured, on this corpus, 2026-08-16 —
+# and the student learns that "venue vibe" means any interior.
+#
+# Everything downstream gates on `category in CATEGORIES`, so a video parked
+# here is excluded from training and from Create's slot filling for free.
+NOT_CAFE = "not_cafe"
+
 CATEGORIES = (REVIEW, MONTAGE, AESTHETIC, VENUE_VIBE, MENU_ITEM)
 
 

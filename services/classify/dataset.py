@@ -128,7 +128,8 @@ def _persist(store: Any, video: Any, result: Classification) -> None:
 
 def export_training_set(store: Any, out_path: Path | str, *,
                         confident_only: bool = True,
-                        include_unindexed: bool = False) -> dict[str, Any]:
+                        include_unindexed: bool = False,
+                        verified_only: bool = False) -> dict[str, Any]:
     """Write JSONL ready for a VideoMAE fine-tune.
 
     One row per video. `media` is the platform URL rather than a local path —
@@ -140,13 +141,16 @@ def export_training_set(store: Any, out_path: Path | str, *,
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     rows: list[dict[str, Any]] = []
-    skipped_low = 0
+    skipped_low = skipped_unverified = 0
     for video in store.query():
         result = _stored(video)
         if not result or result.category not in CATEGORIES:
             continue
         if confident_only and not result.is_confident:
             skipped_low += 1
+            continue
+        if verified_only and not result.verified:
+            skipped_unverified += 1
             continue
         tl_id = (getattr(video, "screening", None) or {}).get("video_id")
         if not tl_id and not include_unindexed:
@@ -158,6 +162,8 @@ def export_training_set(store: Any, out_path: Path | str, *,
             "confidence": result.confidence,
             "runner_up": result.runner_up,
             "teacher": result.source,
+            "verified": result.verified,
+            "verified_by": result.verified_by,
             "media_url": video.url,
             "platform": video.platform,
             "duration_seconds": video.duration_seconds,
@@ -176,6 +182,7 @@ def export_training_set(store: Any, out_path: Path | str, *,
         "path": str(out_path),
         "rows": len(rows),
         "skipped_low_confidence": skipped_low,
+        "skipped_unverified": skipped_unverified,
         "by_category": dict(counts),
     }
 

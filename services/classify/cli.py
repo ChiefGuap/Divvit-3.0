@@ -37,8 +37,13 @@ from services.classify.classifier import (                     # noqa: E402
     classify_from_screening)
 from services.classify.dataset import (                        # noqa: E402
     MIN_PER_CATEGORY, export_training_set, label_corpus, readiness)
+from services.classify.pipeline import MediaLabeller           # noqa: E402
 from services.classify.taxonomy import (                       # noqa: E402
-    CATEGORIES, TAXONOMY, UNCLASSIFIED)
+    CATEGORIES, NOT_CAFE, TAXONOMY, UNCLASSIFIED)
+from services.classify.verify import (                         # noqa: E402
+    DEFAULT_GOLD_PATH, SECOND_OPINION_MODEL, apply_gold, coverage, load_gold,
+    review_queue, sample_for_review, save_gold, score_against_gold,
+    verify_by_agreement)
 from services.discover.store import CorpusStore, DEFAULT_DB    # noqa: E402
 
 
@@ -172,14 +177,180 @@ def cmd_export(args) -> int:
     result = export_training_set(
         store, args.out,
         confident_only=not args.all_confidence,
-        include_unindexed=args.include_unindexed)
+        include_unindexed=args.include_unindexed,
+        verified_only=args.verified_only)
     print(f"[export] {result['rows']} rows -> {result['path']}")
     print(f"[export] by category: {result['by_category'] or 'none'}")
     if result["skipped_low_confidence"]:
         print(f"[export] skipped {result['skipped_low_confidence']} low-confidence "
               "labels (--all-confidence includes them, at the cost of teaching "
               "the student the teacher's guesses)")
+    if result["skipped_unverified"]:
+        print(f"[export] skipped {result['skipped_unverified']} unverified labels")
     return 0 if result["rows"] else 1
+
+
+def cmd_media(args) -> int:
+    """Download -> classify -> delete. The path that reaches every video."""
+    store = CorpusStore(args.db)
+    labeller = MediaLabeller(store, media_dir=args.media_dir,
+                             keep_media=args.keep_media)
+
+    batch = labeller.candidates(limit=args.limit, relabel=args.relabel,
+                                platform=args.platform)
+    print(f"[media] {len(batch)} videos selected (limit {args.limit})")
+    if args.dry_run:
+        for video in batch[:20]:
+            dur = f"{video.duration_seconds:.0f}s" if video.duration_seconds else "?"
+            print(f"        {dur:>5}  {(video.title or video.url)[:64]}")
+        if len(batch) > 20:
+            print(f"        ... and {len(batch) - 20} more")
+        print("\n[media] dry run — nothing fetched, nothing spent.")
+        return 0
+
+    report = labeller.run(limit=args.limit, relabel=args.relabel,
+                          platform=args.platform)
+    print(f"\n[media] {report.summary()}")
+    for err in report.errors[:10]:
+        print(f"    ! {err}")
+    return 0 if report.labelled or not report.attempted else 1
+
+
+def cmd_verify(args) -> int:
+    store = CorpusStore(args.db)
+    print(f"[verify] second opinion from {SECOND_OPINION_MODEL}\n")
+    report = verify_by_agreement(store, limit=args.limit,
+                                 media_dir=args.media_dir)
+    print(f"\n[verify] {report.summary()}")
+    if report.input_tokens:
+        print(f"[verify] {report.input_tokens:,} input tokens")
+
+    for conflict in report.conflicts[:10]:
+        print(f"\n  disputed: {conflict['title'][:60]}")
+        print(f"    {conflict['first']:<12} {conflict['first_evidence'][:80]}")
+        print(f"    {conflict['second']:<12} {conflict['second_evidence'][:80]}")
+        print(f"    {conflict['url']}")
+    for err in report.errors[:5]:
+        print(f"    ! {err}")
+
+    if report.conflicts:
+        print(f"\n  {len(report.conflicts)} disputed labels kept their original "
+              "value and stay unverified — a newer model is not automatically "
+              "a righter one. Send them to `gold`.")
+    return 0
+
+
+def cmd_review(args) -> int:
+    store = CorpusStore(args.db)
+    rows = review_queue(store, limit=args.limit)
+    if not rows:
+        print("nothing queued for review.")
+        return 0
+    print(f"\n{len(rows)} labels want a human look, most-consequential first:\n")
+    for row in rows:
+        print(f"  {row['predicted']:<12} {row['confidence']:<7} "
+              f"{(row['title'] or '')[:52]}")
+        print(f"    why: {row['why']}")
+        print(f"    {row['url']}")
+    if args.json_out:
+        Path(args.json_out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.json_out).write_text(json.dumps(rows, indent=2))
+        print(f"\nwrote {args.json_out}")
+    return 0
+
+
+def cmd_gold(args) -> int:
+    store = CorpusStore(args.db)
+    gold_path = Path(args.gold)
+
+    if args.action == "sample":
+        rows = sample_for_review(store, size=args.size)
+        if not rows:
+            print("no labelled videos to sample — run `label` or `media` first.")
+            return 1
+        out = Path(args.out or "data/classify_review_sample.json")
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(rows, indent=2))
+        print(f"wrote {len(rows)} videos to {out}\n")
+        print("Fill in the \"gold\" field on each row by watching the video, then:")
+        print(f"  python -m services.classify.cli gold apply --from {out}")
+        return 0
+
+    if args.action == "apply":
+        source = Path(args.from_file) if args.from_file else gold_path
+        if not source.exists():
+            print(f"error: {source} does not exist", file=sys.stderr)
+            return 2
+        raw = json.loads(source.read_text())
+        if isinstance(raw, list):           # a filled-in review sample
+            labels = {r["canonical_id"]: r["gold"] for r in raw
+                      if r.get("gold") in CATEGORIES}
+            blank = sum(1 for r in raw if not r.get("gold"))
+            if blank:
+                print(f"note: {blank} rows have no gold label yet — skipping them")
+            merged = {**load_gold(gold_path), **labels}
+            save_gold(merged, gold_path)
+            print(f"merged {len(labels)} human labels into {gold_path}")
+        else:
+            merged = load_gold(source)
+
+        stats = apply_gold(store, merged)
+        print(f"applied to corpus: {stats}")
+        return 0
+
+    # score
+    gold = load_gold(gold_path)
+    if not gold:
+        print(f"no gold labels at {gold_path}.\n\nBuild some:\n"
+              "  python -m services.classify.cli gold sample --size 40")
+        return 1
+
+    report = score_against_gold(store, gold)
+    print(f"\n{report.summary()}")
+    if report.unlabelled:
+        print(f"({report.unlabelled} gold videos have no model label to compare)")
+
+    print("\nper category:")
+    for category in CATEGORIES:
+        c = report.per_category[category]
+        rec = f"{c['recall']:.0%}" if c["recall"] is not None else "-"
+        prec = f"{c['precision']:.0%}" if c["precision"] is not None else "-"
+        print(f"  {c['label']:<22} n={c['gold_examples']:<4} "
+              f"recall {rec:<6} precision {prec}")
+
+    if report.mistakes:
+        print(f"\n{len(report.mistakes)} mistakes:")
+        for m in report.mistakes[:15]:
+            print(f"  said {m['predicted']:<12} was {m['gold']:<12} "
+                  f"({m['confidence']}) {m['url']}")
+
+    if args.json_out:
+        Path(args.json_out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.json_out).write_text(json.dumps({
+            "checked": report.checked, "correct": report.correct,
+            "accuracy": report.accuracy, "confusion": report.confusion,
+            "per_category": report.per_category, "mistakes": report.mistakes,
+        }, indent=2))
+        print(f"\nwrote {args.json_out}")
+    return 0
+
+
+def cmd_coverage(args) -> int:
+    store = CorpusStore(args.db)
+    c = coverage(store)
+    total = c["total"] or 1
+    print(f"\ncorpus       {c['total']}")
+    print(f"labelled     {c['labelled']:>5}  ({c['labelled'] / total:.0%})")
+    print(f"verified     {c['verified']:>5}  ({c['verified'] / total:.0%})"
+          f"  {c['by_verification'] or ''}")
+    print(f"pushable     {c['pushable']:>5}  ({c['pushable'] / total:.0%})"
+          "   confident AND verified\n")
+    if not c["verified"]:
+        print("  Nothing is verified yet. Labels are the teacher's opinion of\n"
+              "  itself until something outside the model agrees:\n"
+              "    gold sample -> a human labels 40 -> gold score  (accuracy)\n"
+              "    verify                                         (stability)\n")
+    return 0
 
 
 def cmd_stats(args) -> int:
@@ -204,10 +375,20 @@ def cmd_stats(args) -> int:
         if result.is_ambiguous:
             ambiguous += 1
 
+    usable = sum(by_category.get(k, 0) for k in CATEGORIES)
+    rejected = by_category.get(NOT_CAFE, 0)
+    looked_at = usable + rejected
+
     print(f"\ncorpus: {total} videos")
-    print(f"labelled: {total - by_category[UNCLASSIFIED]}\n")
+    print(f"looked at: {looked_at}   usable: {usable}   rejected: {rejected}\n")
     for key in CATEGORIES:
         print(f"  {TAXONOMY[key].label:<22} {by_category.get(key, 0):>4}")
+    # Shown on its own line rather than folded into "labelled": a rejected
+    # video has been looked at but is not corpus, and reporting it as labelled
+    # would overstate how much usable data we have.
+    print(f"  {'not cafe content':<22} {rejected:>4}"
+          + (f"   ({rejected / looked_at:.0%} of everything looked at)"
+             if looked_at else ""))
     print(f"  {'unclassified':<22} {by_category[UNCLASSIFIED]:>4}"
           f"   ({indexed_unlabelled} of them indexed, so labellable now)")
     print(f"\n  by source     {dict(by_source) or '-'}")
@@ -245,11 +426,46 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json-out")
     p.set_defaults(func=cmd_readiness)
 
+    p = sub.add_parser("media", help="download, classify, delete — reaches "
+                                     "unindexed videos")
+    p.add_argument("--limit", type=int, default=25)
+    p.add_argument("--platform")
+    p.add_argument("--media-dir", default="data/media")
+    p.add_argument("--relabel", action="store_true")
+    p.add_argument("--keep-media", action="store_true",
+                   help="keep the downloaded file (debugging a bad label only)")
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(func=cmd_media)
+
+    p = sub.add_parser("verify", help="second opinion from a different model")
+    p.add_argument("--limit", type=int, default=25)
+    p.add_argument("--media-dir", default="data/media")
+    p.set_defaults(func=cmd_verify)
+
+    p = sub.add_parser("review", help="labels that want a human look")
+    p.add_argument("--limit", type=int, default=50)
+    p.add_argument("--json-out")
+    p.set_defaults(func=cmd_review)
+
+    p = sub.add_parser("gold", help="human labels: the only measure of accuracy")
+    p.add_argument("action", choices=["sample", "apply", "score"])
+    p.add_argument("--gold", default=str(DEFAULT_GOLD_PATH))
+    p.add_argument("--size", type=int, default=40, help="sample: how many")
+    p.add_argument("--out", help="sample: where to write")
+    p.add_argument("--from", dest="from_file", help="apply: a filled-in sample")
+    p.add_argument("--json-out")
+    p.set_defaults(func=cmd_gold)
+
+    sub.add_parser("coverage", help="labelled vs verified vs pushable"
+                   ).set_defaults(func=cmd_coverage)
+
     p = sub.add_parser("export", help="write the training JSONL")
     p.add_argument("--out", default="data/training/classify.jsonl")
     p.add_argument("--all-confidence", action="store_true",
                    help="include low-confidence labels")
     p.add_argument("--include-unindexed", action="store_true")
+    p.add_argument("--verified-only", action="store_true",
+                   help="only labels something outside the model agreed with")
     p.set_defaults(func=cmd_export)
 
     sub.add_parser("stats", help="label distribution in the corpus").set_defaults(
