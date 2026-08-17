@@ -1,0 +1,68 @@
+{
+  "_comment": "Copy to agent_config.json and edit. Budgets are per run.",
+
+  "corpus_db": "data/discover.db",
+  "report_dir": "data/reports",
+  "media_dir": "data/media",
+  "connector": "ytdlp",
+  "_platforms_comment": "TikTok works via creator pages only (hashtag search fails on request signing). Instagram needs a browser session cookie and is off by default.",
+  "platforms": ["youtube", "tiktok"],
+
+  "harvest": {
+    "_trend_comment": "Keyword search exhausts fast — a second run over the same cities returned 0 new videos from 80 queries. Its real job is DISCOVERING CREATOR HANDLES, which then become the supply line. Keep the list short and rotate cities occasionally rather than running many every day.",
+    "trend": [
+      { "city": "San Diego", "cuisine": "" },
+      { "city": "Los Angeles", "cuisine": "cafe" },
+      { "city": "New York", "cuisine": "cafe" }
+    ],
+    "businesses": [
+      {
+        "name": "Better Buzz Coffee",
+        "business_id": "demo-better-buzz",
+        "city": "San Diego",
+        "cuisine": "coffee shop",
+        "competitors": ["Bird Rock Coffee", "James Coffee Co"]
+      }
+    ],
+    "_creators_comment": "Highest-yield source by far: a creator's Shorts tab is entirely vertical short-form by construction, where keyword search yields ~5 per city per run. Measured 104 videos from 5 handles vs 5 from 22 keyword queries. Seed from creators the trend harvest surfaces. Vet each one first — a handle that mixes food with comedy skits (e.g. @growingupitalian) floods the corpus with content screening then has to reject one paid indexing minute at a time.",
+    "creators": {
+      "youtube": [
+        "@eattryunbox",
+        "@thehangryrider",
+        "@TheVeganFoodCriticOfficial"
+      ],
+      "tiktok": [
+        "@thefoodiediaries"
+      ]
+    },
+
+    "_auto_seed_comment": "min_videos 1 is deliberate. Most creators surface from keyword search exactly once, so a floor of 2 seeds almost nobody — measured: 38 creators tracked, 1 seeded. Harvesting a creator is cheap and the vertical/duration/noise filters still apply; screening auto-blocks the ones that turn out to be junk. Be aggressive here and let the block list do the correcting.",
+    "auto_seed_creators": true,
+    "auto_seed_limit": 40,
+    "auto_seed_min_videos": 1,
+
+    "results_per_query": 20,
+    "_queries_comment": "Creator queries are built first, so this cap spends the run's time on the high-yield source and gives keyword search the remainder. 80 keeps a run around 10 minutes.",
+    "max_queries_per_run": 80,
+    "max_age_days": 730,
+    "_form_comment": "Shorts / Reels / TikTok only. Raise max_duration_seconds or set require_vertical false to let landscape mini-vlogs back in.",
+    "max_duration_seconds": 90,
+    "require_vertical": true,
+    "pause_seconds": 0.4
+  },
+
+  "screening": {
+    "enabled": true,
+    "videos_per_run": 5,
+    "minute_budget": 20.0,
+    "index_name": "divvit-discover",
+    "purge_media": true
+  },
+
+  "roi": {
+    "videos_planned": 10,
+    "reward_cost_usd": 15.0,
+    "creator_followers": 800,
+    "cpm_usd": 12.0
+  }
+}

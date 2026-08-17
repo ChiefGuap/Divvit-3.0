@@ -1,0 +1,185 @@
+/* Divvit dashboard — global styles.
+   Tokens and keyframes come straight from the design handoff
+   (design_handoff_restaurant_dashboard/README.md). The dv* keyframes are
+   copied verbatim — they encode the "cozy & soft" feel. */
+
+:root {
+  /* color tokens (README "Design tokens") */
+  --purple: #8c52ff;
+  --purple-deep: #6346cd;
+  --purple-deepest: #4b29b4;
+  --purple-darkest: #41208f;
+  --purple-light: #b79aff;
+  --purple-tint: rgba(140, 82, 255, 0.10);
+  --ink: #111827;
+  --text-secondary: #4b5563;
+  --text-muted: #6b7280;
+  --text-faint: #9ca3af;
+  --text-faintest: #c9c4d8;
+  --surface: #ffffff;
+  --surface-sunken: #f5f5f9;
+  --surface-sunken-2: #f1f1f6;
+  --surface-sunken-3: #faf9fd;
+  --segment-track: #f2f0f8;
+  --hairline: rgba(17, 24, 39, 0.07);
+  --divider: #f1eff8;
+  --mint: #16a06b;
+  --mint-dark: #0d7a4f;
+  --mint-light: #a9f5cf;
+  --mango: #f59512;
+  --mango-dark: #b9700a;
+  --blue: #2563eb;
+  --page: #f5f4fa;
+
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+  --shadow-card: 0 0 0 1px rgba(17, 24, 39, 0.07), 0 2px 6px rgba(58, 32, 137, 0.05);
+  --shadow-card-hover: 0 0 0 1.5px rgba(140, 82, 255, 0.45), 0 10px 24px rgba(58, 32, 137, 0.10);
+  --shadow-hero: 0 18px 44px rgba(75, 41, 180, 0.28);
+  --shadow-purple-btn: 0 1px 3px rgba(140, 82, 255, 0.35);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #e9e6f2;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  color: var(--ink);
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 14px;
+}
+
+::selection {
+  background: rgba(140, 82, 255, 0.2);
+}
+
+a {
+  color: #8c52ff;
+  text-decoration: none;
+}
+a:hover {
+  color: #6346cd;
+}
+
+input::placeholder {
+  color: #9ca3af;
+}
+
+button {
+  font-family: inherit;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font-size: inherit;
+}
+
+/* ---- keyframes, verbatim from the prototype ---- */
+@keyframes dvFadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@keyframes dvFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dvGrowBar { from { width: 0; } }
+@keyframes dvPop { 0% { opacity: 0; transform: scale(0.92); } 70% { transform: scale(1.02); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes dvChrome { 0% { background-position: 120% 0; } 100% { background-position: -130% 0; } }
+@keyframes dvPopOut { 0% { opacity: 1; transform: scale(1); } 30% { transform: scale(1.04); } 100% { opacity: 0; transform: scale(0.78); } }
+@keyframes dvToast { 0% { opacity: 0; transform: translate(-50%, -14px); } 6% { opacity: 1; transform: translate(-50%, 0); } 88% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, -10px); } }
+@keyframes dvRing { 0% { transform: scale(0.55); opacity: 0.55; } 100% { transform: scale(1.7); opacity: 0; } }
+@keyframes dvSweep { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes dvScanBar { from { width: 0%; } to { width: 100%; } }
+@keyframes dvDrift { 0% { opacity: 0; transform: translateX(120px) scale(0.85); } 18% { opacity: 1; transform: translateX(62px) scale(1); } 82% { opacity: 1; transform: translateX(-62px) scale(1); } 100% { opacity: 0; transform: translateX(-120px) scale(0.85); } }
+@keyframes dvChipPulse { 0%, 100% { opacity: 0.45; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
+@keyframes dvSigA { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes dvSigB { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes dvBarA { from { width: 0%; } to { width: 100%; } }
+@keyframes dvBarB { from { width: 0%; } to { width: 100%; } }
+@keyframes dvSlideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: none; } }
+@keyframes dvBreathe { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.82); } }
+@keyframes dvHalo { 0%, 100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 0.9; transform: scale(1.25); } }
+@keyframes dvSpin { to { transform: rotate(360deg); } }
+@keyframes dvEdPlay { 0% { left: 4%; } 100% { left: 96%; } }
+@keyframes dvEdClip { 0%, 100% { transform: translateY(0); opacity: 0.5; } 50% { transform: translateY(-3px); opacity: 1; } }
+@keyframes dvEdPop { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.09); } }
+@keyframes dvEdCut { 0%, 42% { opacity: 0; transform: translateY(5px); } 56%, 100% { opacity: 1; transform: none; } }
+@keyframes dvEdSheen { 0% { transform: translateX(-120%); } 100% { transform: translateX(220%); } }
+@keyframes dvSendCM { 0% { opacity: 0; transform: translate(0, 0) scale(1); } 14% { opacity: 1; } 100% { opacity: 0; transform: translate(-42vw, 26vh) scale(0.24); } }
+@keyframes dvStepIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+/* reduced motion: keep fades, drop movement (README "Interactions") */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---- recurring interactive patterns (prototype uses style-hover) ---- */
+
+.btnPurple {
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #9a63ff 0%, #8c52ff 30%, #6f3bea 66%, #4b29b4 100%);
+  background-size: 100% 250%;
+  background-position: 0% 0%;
+  color: #fff;
+  font-family: "Inter", system-ui, sans-serif;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-position 0.5s cubic-bezier(0.16, 0.9, 0.24, 1);
+}
+.btnPurple:hover { background-position: 0% 100%; }
+
+.btnQuiet {
+  border: none;
+  border-radius: 8px;
+  background: #f5f5f9;
+  box-shadow: 0 0 0 1px rgba(17, 24, 39, 0.07);
+  color: #4b5563;
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+.btnQuiet:hover { color: #111827; }
+
+.btnDanger:hover { color: #ef4444 !important; }
+
+.navItem { transition: background 0.15s ease; }
+.navItem:hover { background: #e6e3f0; }
+
+.menuItem { transition: background 0.15s ease, color 0.15s ease; }
+.menuItem:hover { background: #f3f1fa; color: #111827 !important; }
+.menuItemPurpleTint:hover { background: #f4f2fb; color: #111827 !important; }
+.menuItemDanger:hover { background: rgba(239, 68, 68, 0.08); }
+
+.cardLift {
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.cardLift:hover {
+  box-shadow: 0 0 0 1.5px rgba(140, 82, 255, 0.45), 0 10px 24px rgba(58, 32, 137, 0.10);
+  transform: translateY(-2px);
+}
+
+.searchBar { transition: box-shadow 0.2s ease; }
+.searchBar:hover { box-shadow: inset 0 0 0 1px rgba(140, 82, 255, 0.4); }
+
+.hoverRowPurple:hover { background: rgba(140, 82, 255, 0.08) !important; }
+.hoverRowMint:hover { background: rgba(22, 160, 107, 0.1) !important; }
+.hoverWhite:hover { background: #ffffff !important; }
+.hoverInk:hover { color: #111827 !important; }
+.hoverPurple:hover { color: #8c52ff !important; }
+
+/* thin scrollbars for horizontal strips */
+.scrollThin::-webkit-scrollbar { height: 6px; }
+.scrollThin::-webkit-scrollbar-thumb { background: rgba(17, 24, 39, 0.12); border-radius: 99px; }
+.scrollThin::-webkit-scrollbar-track { background: transparent; }
