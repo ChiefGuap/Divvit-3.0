@@ -8,6 +8,11 @@ Three tables:
 
   cafes                   the roster. Keyed `osm:<type>:<id>`. Chains are kept
                           with `is_chain=1` and a reason — evidence, not noise.
+                          Each row also carries a **lifecycle status**
+                          (active | closed | unverifiable) with the evidence
+                          that produced it; see `lifecycle.py`. Non-active
+                          cafes stay on the roster and are filtered out of
+                          `cafes()` by default rather than deleted.
   cafe_signals            one row per cafe once a metrics pass has *attempted*
                           it. A column that is NULL means "not measured";
                           a JSON payload with zeros means "measured, zero".
@@ -26,7 +31,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
-from .roster import CafeRecord
+from .roster import (CafeRecord, STATUS_ACTIVE, STATUS_CLOSED,
+                     STATUS_UNVERIFIABLE, STATUSES)
 
 DEFAULT_DB = Path("data/venues.db")
 
@@ -52,12 +58,22 @@ CREATE TABLE IF NOT EXISTS cafes (
     is_chain         INTEGER NOT NULL DEFAULT 0,
     exclusion_reason TEXT,
     tags             TEXT,                  -- raw OSM tags, JSON
+    -- Lifecycle. Written by `lifecycle.py`, never by the Overpass refresh:
+    -- OSM is where the roster comes from, not where closures are recorded.
+    status            TEXT NOT NULL DEFAULT 'active',  -- active|closed|unverifiable
+    status_confidence TEXT,                 -- high|medium|low
+    status_reason     TEXT,                 -- one human-readable sentence
+    status_evidence   TEXT,                 -- JSON: what we actually observed
+    status_checked_at TEXT,                 -- ISO-8601 UTC of the assessment
     first_seen       TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at       TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_cafes_chain ON cafes(is_chain);
-CREATE INDEX IF NOT EXISTS idx_cafes_city  ON cafes(city);
+CREATE INDEX IF NOT EXISTS idx_cafes_chain  ON cafes(is_chain);
+CREATE INDEX IF NOT EXISTS idx_cafes_city   ON cafes(city);
+-- idx_cafes_status is created in _init_schema, after the additive migration:
+-- on an existing DB this script runs before `status` has been added, and
+-- indexing a column that does not exist yet fails the whole executescript.
 
 CREATE TABLE IF NOT EXISTS cafe_signals (
     cafe_id      TEXT PRIMARY KEY,
@@ -83,12 +99,20 @@ CREATE TABLE IF NOT EXISTS brand_health_snapshots (
 CREATE INDEX IF NOT EXISTS idx_bh_cafe ON brand_health_snapshots(cafe_id);
 """
 
+# OSM-derived columns only — the ones an Overpass refresh is allowed to
+# overwrite. The lifecycle columns are deliberately absent: a `roster` re-run
+# must not resurrect a cafe we have evidence is closed, because OSM is exactly
+# the source whose staleness the lifecycle exists to correct. `set_status()`
+# is the only writer.
 _CAFE_COLUMNS = [
     "cafe_id", "name", "lat", "lon", "city", "street", "housenumber",
     "postcode", "website", "phone", "instagram", "facebook", "tiktok",
     "cuisine", "opening_hours", "county", "source", "is_chain",
     "exclusion_reason", "tags",
 ]
+
+_STATUS_COLUMNS = ["status", "status_confidence", "status_reason",
+                   "status_evidence", "status_checked_at"]
 
 
 class RosterStore:
@@ -114,9 +138,21 @@ class RosterStore:
             # a column existed must upgrade themselves on open.
             existing = {r["name"] for r in conn.execute("PRAGMA table_info(cafes)")}
             for column, decl in (("county", "TEXT"), ("tiktok", "TEXT"),
-                                 ("opening_hours", "TEXT")):
+                                 ("opening_hours", "TEXT"),
+                                 # Lifecycle. `status` carries a NOT NULL
+                                 # default so existing rows land on 'active'
+                                 # in one statement — a roster built before
+                                 # this column existed is a roster of cafes we
+                                 # had no contrary evidence about.
+                                 ("status", "TEXT NOT NULL DEFAULT 'active'"),
+                                 ("status_confidence", "TEXT"),
+                                 ("status_reason", "TEXT"),
+                                 ("status_evidence", "TEXT"),
+                                 ("status_checked_at", "TEXT")):
                 if column not in existing:
                     conn.execute(f"ALTER TABLE cafes ADD COLUMN {column} {decl}")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_cafes_status"
+                         " ON cafes(status)")
 
             signal_columns = {r["name"] for r in
                               conn.execute("PRAGMA table_info(cafe_signals)")}
@@ -160,13 +196,23 @@ class RosterStore:
         return total, new
 
     def cafes(self, include_chains: bool = False, city: str = "",
-              limit: Optional[int] = None) -> list[CafeRecord]:
+              limit: Optional[int] = None,
+              include_inactive: bool = False) -> list[CafeRecord]:
         """Independents by default, in deterministic cafe_id order — the order
-        the metrics pass walks, which is what makes resume meaningful."""
+        the metrics pass walks, which is what makes resume meaningful.
+
+        Also **active** by default. A cafe Google reports as permanently
+        closed, or that Google has never heard of at that location, is still
+        on the roster with its evidence — but it is not a prospect, and the
+        default read of the roster is "who can we sell to". Pass
+        `include_inactive=True` for the audit view.
+        """
         sql = "SELECT * FROM cafes WHERE 1=1"
         params: list[Any] = []
         if not include_chains:
             sql += " AND is_chain = 0"
+        if not include_inactive:
+            sql += " AND status = 'active'"
         if city:
             sql += " AND lower(city) = ?"
             params.append(city.strip().lower())
@@ -196,6 +242,41 @@ class RosterStore:
                 (f"%{name.strip().lower()}%",)).fetchone()
         return self._cafe_from_row(row) if row else None
 
+    # ----------------------------------------------------------- lifecycle
+    def set_status(self, cafe_id: str, status: str, confidence: str = "",
+                   reason: str = "", evidence: Optional[dict[str, Any]] = None,
+                   checked_at: str = "") -> None:
+        """Record a lifecycle assessment. The only writer of the status
+        columns — deliberately separate from `upsert_cafe`, so re-running the
+        Overpass roster refresh never resurrects a closed cafe.
+
+        The evidence and the date are stored alongside the state because the
+        state alone is an assertion; with the evidence it is a finding that
+        can be re-checked or overturned.
+        """
+        if status not in STATUSES:
+            raise ValueError(f"unknown lifecycle status {status!r}; "
+                             f"expected one of {sorted(STATUSES)}")
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE cafes SET status=?, status_confidence=?,"
+                " status_reason=?, status_evidence=?,"
+                " status_checked_at=COALESCE(NULLIF(?,''), CURRENT_TIMESTAMP),"
+                " updated_at=CURRENT_TIMESTAMP WHERE cafe_id=?",
+                (status, confidence or None, reason or None,
+                 json.dumps(evidence) if evidence is not None else None,
+                 checked_at, cafe_id))
+
+    def status_counts(self, include_chains: bool = False) -> dict[str, int]:
+        sql = "SELECT status, COUNT(*) c FROM cafes"
+        if not include_chains:
+            sql += " WHERE is_chain = 0"
+        sql += " GROUP BY status"
+        with self._conn() as conn:
+            found = {r["status"]: r["c"] for r in conn.execute(sql)}
+        return {s: found.get(s, 0) for s in sorted(STATUSES)} | {
+            k: v for k, v in found.items() if k not in STATUSES}
+
     def counts(self) -> dict[str, Any]:
         with self._conn() as conn:
             total = conn.execute("SELECT COUNT(*) c FROM cafes").fetchone()["c"]
@@ -211,8 +292,15 @@ class RosterStore:
                 "SELECT COUNT(*) c FROM cafe_signals").fetchone()["c"]
             top_cities = {r["city"]: r["c"] for r in conn.execute(
                 "SELECT city, COUNT(*) c FROM cafes WHERE is_chain = 0"
-                " AND city != '' GROUP BY city ORDER BY c DESC LIMIT 12")}
+                " AND status = 'active' AND city != ''"
+                " GROUP BY city ORDER BY c DESC LIMIT 12")}
+        by_status = self.status_counts()
         return {"total": total, "independent": total - chains, "chains": chains,
+                # `independent` stays every non-chain record ever seen so the
+                # roster's history is not silently rewritten; `active` is the
+                # sellable set.
+                "active": by_status.get(STATUS_ACTIVE, 0),
+                "by_status": by_status,
                 "with_website": with_site, "with_instagram": with_ig,
                 "measured": measured, "top_cities": top_cities}
 
@@ -264,7 +352,8 @@ class RosterStore:
             rows = conn.execute("SELECT * FROM cafe_signals").fetchall()
         return {r["cafe_id"]: self._signals_from_row(r) for r in rows}
 
-    def pending_reviews(self, limit: Optional[int] = None) -> list[CafeRecord]:
+    def pending_reviews(self, limit: Optional[int] = None,
+                        include_inactive: bool = False) -> list[CafeRecord]:
         """Independents whose review signal is still dark.
 
         Separate from `pending_cafes` because the two backfill different
@@ -281,8 +370,10 @@ class RosterStore:
         sql = ("SELECT c.* FROM cafes c LEFT JOIN cafe_signals s"
                " ON s.cafe_id = c.cafe_id"
                " WHERE c.is_chain = 0 AND s.google IS NULL"
-               " AND s.reviews_checked_at IS NULL"
-               " ORDER BY c.cafe_id")
+               " AND s.reviews_checked_at IS NULL")
+        if not include_inactive:
+            sql += " AND c.status = 'active'"
+        sql += " ORDER BY c.cafe_id"
         params: list[Any] = []
         if limit:
             sql += " LIMIT ?"
@@ -291,7 +382,9 @@ class RosterStore:
             rows = conn.execute(sql, params).fetchall()
         return [self._cafe_from_row(r) for r in rows]
 
-    def pending_cafes(self, limit: Optional[int] = None) -> list[CafeRecord]:
+    def pending_cafes(self, limit: Optional[int] = None,
+                      include_inactive: bool = False,
+                      with_review_signal: bool = False) -> list[CafeRecord]:
         """Independents with no *video* signal yet, in cafe_id order.
 
         This is the resume contract: the metrics pass takes `pending_cafes()`,
@@ -304,11 +397,24 @@ class RosterStore:
         moment the two passes were decoupled. Keying on `youtube IS NULL`
         instead would be worse: a cafe whose video measurement *failed* would
         be retried on every run, forever.
+
+        `with_review_signal=True` narrows to the cafes that flip to *rankable*
+        most cheaply. Brand Health needs ≥ 0.50 of its weight observed to rank
+        a cafe; the video pass supplies 0.75 of that weight (volume 0.30,
+        engagement 0.25, recency 0.20) and reviews the other 0.25. So a cafe
+        that already has a review signal becomes rankable the moment the video
+        pass touches it, while a cafe with neither needs the video pass to
+        find something. Same ~15s of yt-dlp per cafe, strictly better odds —
+        which matters when the run is budget-capped rather than exhaustive.
         """
         sql = ("SELECT c.* FROM cafes c LEFT JOIN cafe_signals s"
                " ON s.cafe_id = c.cafe_id"
-               " WHERE c.is_chain = 0 AND s.video_checked_at IS NULL"
-               " ORDER BY c.cafe_id")
+               " WHERE c.is_chain = 0 AND s.video_checked_at IS NULL")
+        if not include_inactive:
+            sql += " AND c.status = 'active'"
+        if with_review_signal:
+            sql += " AND s.google IS NOT NULL"
+        sql += " ORDER BY c.cafe_id"
         params: list[Any] = []
         if limit:
             sql += " LIMIT ?"
@@ -358,7 +464,10 @@ class RosterStore:
         signals = self.all_signals()
         snapshots = self.latest_snapshots()
         out = []
-        for cafe in self.cafes(include_chains=True):
+        # Everything, including chains and retired records: this is the raw
+        # dump, and each row carries `is_chain` / `status` so the consumer can
+        # filter. `export.py` is the curated, documented contract.
+        for cafe in self.cafes(include_chains=True, include_inactive=True):
             d = cafe.to_dict()
             d["signals"] = signals.get(cafe.cafe_id)
             snap = snapshots.get(cafe.cafe_id)
@@ -377,10 +486,14 @@ class RosterStore:
         d.pop("first_seen", None)
         d.pop("updated_at", None)
         d["is_chain"] = bool(d.get("is_chain"))
-        try:
-            d["tags"] = json.loads(d.get("tags") or "{}")
-        except (TypeError, ValueError):
-            d["tags"] = {}
+        for key in ("tags", "status_evidence"):
+            try:
+                d[key] = json.loads(d.get(key) or "{}")
+            except (TypeError, ValueError):
+                d[key] = {}
+        d["status"] = d.get("status") or STATUS_ACTIVE
+        for key in ("status_confidence", "status_reason", "status_checked_at"):
+            d[key] = d.get(key) or ""
         return CafeRecord.from_dict(d)
 
     @staticmethod

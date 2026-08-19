@@ -20,6 +20,11 @@ Chain exclusion is two independent tests, either of which excludes:
 
 Excluded cafes are *stored with a reason*, not dropped — "how many chains did
 we filter" is a question the roster must be able to answer later.
+
+The same principle covers the roster's other kind of non-prospect: a cafe that
+has closed, or that we cannot confirm exists. Those carry a lifecycle `status`
+(see `lifecycle.py`) with the evidence and the date, and are filtered out of
+the default roster read instead of being deleted.
 """
 
 from __future__ import annotations
@@ -54,6 +59,29 @@ CHAIN_BLOCKLIST = (
     # juice chains that OSM sometimes tags as cafes
     "nekter", "juice it up", "jamba",
 )
+
+
+# ------------------------------------------------------------- lifecycle
+# Three states, because "we know it is gone" and "we could not find it" are
+# different findings and deserve different treatment. Both are excluded from
+# prospect rankings; only one of them is a claim about the world.
+#
+#   active        no contrary evidence. The default, and what an OSM node
+#                 means on its own: somebody mapped a cafe here.
+#   closed        a first-party source says the business is not trading —
+#                 today, Google's `businessStatus`. A claim we can defend.
+#   unverifiable  we looked and could not confirm the business exists at that
+#                 point: Places returned nothing, or returned only a
+#                 same-named business too far away to be it (with the OSM
+#                 node already applied as a location bias). Consistent with a
+#                 quiet closure or a rename, but *not* evidence of one.
+STATUS_ACTIVE = "active"
+STATUS_CLOSED = "closed"
+STATUS_UNVERIFIABLE = "unverifiable"
+STATUSES = frozenset((STATUS_ACTIVE, STATUS_CLOSED, STATUS_UNVERIFIABLE))
+
+# Only `active` cafes are prospects.
+SELLABLE_STATUSES = frozenset((STATUS_ACTIVE,))
 
 
 def _boundary_match(name: str, fragment: str) -> bool:
@@ -101,6 +129,19 @@ class CafeRecord:
     is_chain: bool = False
     exclusion_reason: str = ""
     tags: dict[str, str] = field(default_factory=dict)  # raw OSM tags, evidence
+
+    # Lifecycle — see STATUS_* above. Never set from OSM: a fresh CafeRecord
+    # parsed out of Overpass is `active` because nothing contradicts it, and
+    # `RosterStore.set_status()` is what moves it off that default.
+    status: str = STATUS_ACTIVE
+    status_confidence: str = ""
+    status_reason: str = ""
+    status_evidence: dict[str, Any] = field(default_factory=dict)
+    status_checked_at: str = ""
+
+    @property
+    def is_active(self) -> bool:
+        return self.status in SELLABLE_STATUSES
 
     def address(self) -> str:
         street = " ".join(p for p in (self.housenumber, self.street) if p)

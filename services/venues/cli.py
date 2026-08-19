@@ -104,17 +104,23 @@ def cmd_metrics(args) -> int:
         places = None
         print("[metrics] no Places key — review component will stay dark")
 
+    if args.only_reviewed:
+        print("[metrics] selecting cafes that already carry a review signal — "
+              "the video pass makes those rankable immediately")
+
     try:
         tally = run_metrics_pass(
             store, corpus=corpus,
             connector=YtDlpConnector(short_form_only=False),
             limit=args.limit, skip_yelp=args.skip_yelp,
-            places_client=places, pause_seconds=args.pause)
+            places_client=places, pause_seconds=args.pause,
+            with_review_signal=args.only_reviewed)
     except ConnectorError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    remaining = len(store.pending_cafes())
+    remaining = len(store.pending_cafes(
+        with_review_signal=args.only_reviewed))
     print(f"[metrics] attempted {tally['attempted']} cafes: "
           f"{tally['youtube_measured']} measured on youtube "
           f"({tally['videos_found']} relevant videos), "
@@ -170,8 +176,11 @@ def cmd_reviews(args) -> int:
 
 def cmd_health(args) -> int:
     store = RosterStore(args.db)
-    cafes = store.cafes()
-    results = score_roster(cafes, store.all_signals())
+    # Active independents only. A cafe Google says is closed must never reach
+    # a prospect ranking, and it must not sit in the percentile cohort either.
+    cafes = store.cafes(include_inactive=args.include_inactive)
+    results = score_roster(cafes, store.all_signals(),
+                           include_inactive=args.include_inactive)
     if not results:
         print("no measured cafes yet — run `metrics` first", file=sys.stderr)
         return 1
@@ -184,9 +193,16 @@ def cmd_health(args) -> int:
     ranked = [h for h in scored if h.rankable]
     thin = len(scored) - len(ranked)
 
-    print(f"\nBrand Health — {len(ranked)} ranked of {len(cafes)} independent "
-          f"cafes ({len(cafes) - len(results)} unmeasured, {thin} measured too "
-          "thinly to compare)\n")
+    retired = store.status_counts()
+    retired_n = sum(v for k, v in retired.items() if k != "active")
+    print(f"\nBrand Health — {len(ranked)} ranked of {len(cafes)} active "
+          f"independent cafes ({len(cafes) - len(results)} unmeasured, {thin} "
+          "measured too thinly to compare)")
+    if retired_n and not args.include_inactive:
+        print(f"  {retired_n} retired records held out of the roster "
+              f"({', '.join(f'{v} {k}' for k, v in retired.items() if k != 'active' and v)})"
+              " — see `lifecycle`, or pass --include-inactive")
+    print()
     print(f"{'#':>3}  {'score':>5}  conf    {'vids':>4}  {'eng%':>5}  "
           f"{'reviews':>9}  name / city")
     for i, h in enumerate(ranked[:args.top], 1):
@@ -240,14 +256,61 @@ def cmd_harvest(args) -> int:
 
 
 def cmd_export(args) -> int:
+    """Write the documented seed contract — see export.py's module docstring."""
+    from .export import write_export
+
     store = RosterStore(args.db)
-    rows = store.export_rows()
-    payload = {"generated_at": datetime.now(timezone.utc).isoformat(),
-               "counts": store.counts(), "cafes": rows}
-    out = Path(args.json)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(payload, indent=2, ensure_ascii=False))
-    print(f"[export] {len(rows)} cafes -> {out}")
+    out, payload = write_export(store, path=args.json,
+                                corpus_db=args.corpus_db)
+    counts = payload["counts"]
+    print(f"[export] schema v{payload['schema_version']} -> {out}")
+    print(f"[export] {counts['active']} active cafes "
+          f"({counts['ranked']} ranked, {counts['with_review_signal']} with a "
+          f"review signal, {counts['with_video_signal']} video-measured), "
+          f"{counts['videos']} videos")
+    print(f"[export] {counts['retired']} retired records kept as evidence: "
+          + ", ".join(f"{v} {k}" for k, v in counts["by_status"].items()
+                      if k != "active" and v))
+    return 0
+
+
+def cmd_lifecycle(args) -> int:
+    """Assess which roster cafes are still real businesses.
+
+    Reads the evidence already on `cafe_signals` first, so this normally
+    costs nothing. A Places client is attached only when `--recheck` asks for
+    it, and even then the on-disk query+bias cache serves anything a previous
+    pass already looked up.
+    """
+    from .lifecycle import run_lifecycle_pass
+    from .roster import STATUS_ACTIVE, STATUS_CLOSED, STATUS_UNVERIFIABLE
+
+    store = RosterStore(args.db)
+    client = None
+    if args.recheck:
+        from .places import PlacesClient
+        client = PlacesClient(cache_dir=args.cache_dir)
+        ok, why = client.available()
+        if not ok:
+            print(f"[lifecycle] {why} — assessing from stored evidence only")
+            client = None
+
+    before = store.status_counts()
+    tally = run_lifecycle_pass(store, places_client=client, limit=args.limit,
+                               dry_run=args.dry_run, on_status=print)
+
+    print(f"\n[lifecycle] assessed {tally['assessed']} independents: "
+          f"{tally[STATUS_ACTIVE]} active, {tally[STATUS_CLOSED]} closed, "
+          f"{tally[STATUS_UNVERIFIABLE]} unverifiable")
+    print(f"[lifecycle] before: {before}")
+    print(f"[lifecycle] after:  {store.status_counts()}")
+    if tally["transitions"]:
+        print(f"[lifecycle] transitions: {tally['transitions']}")
+    if client is not None:
+        print(f"[lifecycle] {client.billed_calls} billed calls, "
+              f"{client.cache_hits} served from cache")
+    if args.dry_run:
+        print("[lifecycle] dry run — nothing written")
     return 0
 
 
@@ -305,6 +368,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--skip-yelp", action="store_true")
     p.add_argument("--no-places", action="store_true",
                    help="skip the review lookup even when a key is present")
+    p.add_argument("--only-reviewed", action="store_true",
+                   help="only measure cafes that already have a review "
+                        "signal — the cheapest path to a rankable cafe")
     p.add_argument("--pause", type=float, default=1.5,
                    help="seconds between cafes")
     p.set_defaults(func=cmd_metrics)
@@ -319,6 +385,9 @@ def build_parser() -> argparse.ArgumentParser:
     common(p)
     p.add_argument("--top", type=int, default=25)
     p.add_argument("--no-report", action="store_true")
+    p.add_argument("--include-inactive", action="store_true",
+                   help="score closed/unverifiable cafes too (audit view; "
+                        "they are excluded from prospect rankings by default)")
     p.set_defaults(func=cmd_health)
 
     p = sub.add_parser("harvest", help="full video harvest for one cafe")
@@ -331,9 +400,22 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dry-run", action="store_true")
     p.set_defaults(func=cmd_harvest)
 
-    p = sub.add_parser("export", help="roster + signals + scores as JSON")
+    p = sub.add_parser("lifecycle",
+                       help="assess active/closed/unverifiable from evidence")
+    common(p)
+    p.add_argument("--limit", type=int, default=None)
+    p.add_argument("--cache-dir", default="data/places")
+    p.add_argument("--recheck", action="store_true",
+                   help="query Places for cafes whose recorded reason is "
+                        "missing (cache-served, normally 0 billed calls)")
+    p.add_argument("--dry-run", action="store_true",
+                   help="print the transitions without writing them")
+    p.set_defaults(func=cmd_lifecycle)
+
+    p = sub.add_parser("export", help="the dashboard seed contract as JSON")
     common(p)
     p.add_argument("--json", default="data/roster_export.json")
+    p.add_argument("--corpus-db", default=str(CORPUS_DB))
     p.set_defaults(func=cmd_export)
 
     return parser

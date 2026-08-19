@@ -302,15 +302,25 @@ def run_metrics_pass(
     places_client: Any = None,
     pause_seconds: float = 1.5,
     on_status: Callable[[str], None] = print,
+    with_review_signal: bool = False,
 ) -> dict[str, int]:
     """Measure pending cafes until `limit` is exhausted. Deterministic order +
-    one `cafe_signals` row per attempt = a re-run resumes, never restarts."""
+    one `cafe_signals` row per attempt = a re-run resumes, never restarts.
+
+    `with_review_signal=True` restricts the pass to cafes that already carry a
+    review score. Each of those needs only the video pass to clear Brand
+    Health's 0.50 coverage bar, so under a fixed run budget it converts far
+    more cafes to *rankable* per minute of yt-dlp than walking the roster in
+    order does. Retired cafes are excluded either way — `pending_cafes()`
+    filters on lifecycle status, so a closed cafe is never spent time on.
+    """
     connector = connector or YtDlpConnector(short_form_only=False)
     ok, why = connector.available()
     if not ok:
         raise ConnectorError(why)
 
-    pending = roster.pending_cafes(limit=limit)
+    pending = roster.pending_cafes(limit=limit,
+                                   with_review_signal=with_review_signal)
     tally = {"attempted": 0, "youtube_measured": 0, "videos_found": 0,
              "yelp_measured": 0, "yelp_absent": 0,
              "google_measured": 0, "google_absent": 0}

@@ -186,14 +186,27 @@ def _confidence(coverage: float) -> str:
 
 def score_roster(cafes: list[CafeRecord],
                  signals_by_cafe: dict[str, dict[str, Any]],
-                 now: Optional[datetime] = None) -> list[BrandHealth]:
+                 now: Optional[datetime] = None,
+                 include_inactive: bool = False) -> list[BrandHealth]:
     """Score every measurable cafe against the cohort. Returns one BrandHealth
     per *measured* cafe — unmeasured cafes are simply not in the list, which
-    is the honest version of "no score"."""
+    is the honest version of "no score".
+
+    Cafes whose lifecycle status is not `active` are dropped before scoring.
+    `RosterStore.cafes()` already filters them, so this is the second lock on
+    the same door: a closed cafe in a prospect's league table is the kind of
+    error that ends a sales conversation, and it should not depend on every
+    caller remembering to pass the right flag. Dropping them also keeps them
+    out of the percentile cohort, which is the subtler half — a retired cafe
+    with no videos would otherwise pad the bottom of the distribution and lift
+    everyone else's social_volume percentile for free.
+    """
     now = now or _now()
 
     measured: list[tuple[CafeRecord, dict[str, Optional[float]]]] = []
     for cafe in cafes:
+        if not include_inactive and not getattr(cafe, "is_active", True):
+            continue
         raw = raw_components(signals_by_cafe.get(cafe.cafe_id), now=now)
         if raw is not None:
             measured.append((cafe, raw))
