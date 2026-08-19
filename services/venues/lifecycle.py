@@ -117,6 +117,31 @@ ACTIVE_NO_EVIDENCE = Verdict(
     evidence={"source": "none"})
 
 
+# A cafe people are still filming is trading, whatever Places can or cannot
+# find. `unverifiable` is an admission about *our* evidence, so any positive
+# evidence of life outranks it.
+#
+# Measured on the Orange County roster (2026-08-19). Of the 15 retired cafes
+# that carry any video at all, the newest video splits them cleanly:
+#
+#     2026-03-20  If You Know You Know   unverifiable   <- almost certainly wrong
+#     2026-01-01  The Vintage 1979       unverifiable   <- almost certainly wrong
+#     2025-07-30  Kit Coffee             unverifiable   <- almost certainly wrong
+#     2024-12-20  The Coffee Shop        unverifiable
+#     ...          everything else is 2024 or older
+#
+# The three are separated from the rest by roughly a year, and two of them had
+# been ranked #2 and #4 in the county before retirement — a false retirement is
+# not a rounding error, it removes a real prospect from the sales list.
+#
+# 18 months is a judgement, not a fitted constant: it sits inside that gap, and
+# it is long enough that a cafe filmed within it is very unlikely to have shut
+# without Google noticing, while a video from three years ago says nothing
+# about today. It deliberately does NOT rescue `closed`: `businessStatus` is
+# Google's first-party claim about the world and outranks our inference.
+VIDEO_LIFE_EVIDENCE_DAYS = 548.0
+
+
 # ------------------------------------------------------- evidence readers
 
 def verdict_from_match(match: Any, reason: Optional[str]) -> Verdict:
@@ -225,6 +250,52 @@ def _places_reasons(signals: Optional[dict[str, Any]]) -> list[str]:
     return [e for e in errors if isinstance(e, str) and e.startswith("places:")]
 
 
+def newest_video_age_days(signals: Optional[dict[str, Any]],
+                          now: Optional[datetime] = None) -> Optional[float]:
+    """Days since the freshest video about this cafe, or None if there are none."""
+    youtube = (signals or {}).get("youtube") or {}
+    now = now or datetime.now(timezone.utc)
+    ages = []
+    for video in youtube.get("videos") or []:
+        published = video.get("published_at")
+        if not published:
+            continue
+        try:
+            when = datetime.fromisoformat(str(published).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        ages.append(max((now - when).total_seconds() / 86400.0, 0.0))
+    return min(ages) if ages else None
+
+
+def apply_life_evidence(verdict: Verdict, signals: Optional[dict[str, Any]],
+                        now: Optional[datetime] = None) -> Verdict:
+    """Let recent filming overturn an `unverifiable` retirement.
+
+    Only `unverifiable` is eligible. That state means "we could not find this
+    business", which a video from last month directly contradicts — the cafe
+    is trading under a name Google indexes differently, or the OSM node is
+    misplaced. `closed` is untouched: Google saying a business is shut beats
+    our inference from a video that may predate the closure.
+    """
+    if verdict.status != STATUS_UNVERIFIABLE:
+        return verdict
+    age = newest_video_age_days(signals, now=now)
+    if age is None or age > VIDEO_LIFE_EVIDENCE_DAYS:
+        return verdict
+    return Verdict(
+        status=STATUS_ACTIVE,
+        confidence="medium",
+        reason=(f"could not be verified against Places, but has a video from "
+                f"{age:.0f} days ago — people are still filming it"),
+        evidence={"source": "discover.videos",
+                  "newest_video_age_days": round(age, 1),
+                  "threshold_days": VIDEO_LIFE_EVIDENCE_DAYS,
+                  "overturned": verdict.to_dict()})
+
+
 def assess_cafe(cafe: CafeRecord, signals: Optional[dict[str, Any]],
                 places_client: Any = None) -> Verdict:
     """Decide one cafe's lifecycle state from the cheapest evidence available.
@@ -241,6 +312,13 @@ def assess_cafe(cafe: CafeRecord, signals: Optional[dict[str, Any]],
          write to the same `errors` column.
       4. Nothing to go on -> active. Absence of evidence never retires a cafe.
     """
+    return apply_life_evidence(_assess_from_sources(cafe, signals,
+                                                    places_client), signals)
+
+
+def _assess_from_sources(cafe: CafeRecord, signals: Optional[dict[str, Any]],
+                         places_client: Any = None) -> Verdict:
+    """The Places-derived verdict, before video counter-evidence is applied."""
     google = (signals or {}).get("google")
     if google:
         status_text = google.get("business_status") or ""
@@ -315,11 +393,27 @@ def run_lifecycle_pass(roster: Any, places_client: Any = None,
         if verdict.is_evidence_free and before != STATUS_ACTIVE:
             # Silence is not an acquittal. Keep the recorded verdict, its
             # evidence and its original date untouched.
-            tally["assessed"] += 1
-            tally[before] += 1
-            tally["held"] += 1
-            tally["unchanged"] += 1
-            continue
+            #
+            # Unless the silence is only about *Places*: a recent video is
+            # positive evidence, not an absence of it, and it contradicts an
+            # `unverifiable` finding directly. It is deliberately not allowed
+            # to reopen a `closed` cafe — Google saying a business is shut
+            # beats our inference from footage that may predate the closure.
+            revived = (apply_life_evidence(
+                Verdict(status=STATUS_UNVERIFIABLE,
+                        confidence=UNVERIFIABLE_CONFIDENCE,
+                        reason="held from a previous pass",
+                        evidence={"source": "stored"}),
+                signals.get(cafe.cafe_id))
+                if before == STATUS_UNVERIFIABLE else None)
+
+            if revived is None or not revived.is_active:
+                tally["assessed"] += 1
+                tally[before] += 1
+                tally["held"] += 1
+                tally["unchanged"] += 1
+                continue
+            verdict = revived
 
         tally["assessed"] += 1
         tally[verdict.status] += 1

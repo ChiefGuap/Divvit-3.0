@@ -21,6 +21,7 @@ import json
 import sqlite3
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -31,7 +32,8 @@ from services.venues.brand_health import score_roster                  # noqa: E
 from services.venues.export import (                                   # noqa: E402
     SCHEMA_VERSION, build_export, load_corpus_videos, write_export)
 from services.venues.lifecycle import (                                # noqa: E402
-    assess_cafe, run_lifecycle_pass, verdict_from_match, verdict_from_reason)
+    apply_life_evidence, assess_cafe, run_lifecycle_pass, verdict_from_match,
+    verdict_from_reason)
 from services.venues.places import PlaceMatch                          # noqa: E402
 from services.venues.roster import (                                   # noqa: E402
     CafeRecord, STATUS_ACTIVE, STATUS_CLOSED, STATUS_UNVERIFIABLE)
@@ -623,6 +625,87 @@ def test_export_writes_the_file() -> None:
               "and it is the documented shape, not a stringified blob")
 
 
+def _youtube_signal(*published: str) -> dict:
+    return {"video_count": len(published),
+            "videos": [{"canonical_id": f"youtube:v{i}", "views": 1000,
+                        "likes": 50, "comments": 5, "published_at": p}
+                       for i, p in enumerate(published)]}
+
+
+def test_recent_video_overturns_unverifiable() -> None:
+    """Measured on the live roster: three cafes were retired as unverifiable
+    while carrying 2025/2026 video — two of them ranked #2 and #4 in the
+    county. A cafe people are still filming is trading, and `unverifiable` is
+    a claim about our evidence, not about the cafe.
+    """
+    print("\nrecent video as counter-evidence")
+    now = datetime(2026, 8, 19, tzinfo=timezone.utc)
+    unverifiable = verdict_from_reason(DRIFT_REASON)
+    check(unverifiable.status == STATUS_UNVERIFIABLE, "baseline is unverifiable")
+
+    fresh = apply_life_evidence(
+        unverifiable, {"youtube": _youtube_signal("2026-01-01T00:00:00Z")},
+        now=now)
+    check(fresh.is_active, "a video from 7 months ago revives the cafe")
+    check(fresh.confidence == "medium",
+          "at medium confidence — inferred from activity, not confirmed by Google")
+    check(fresh.evidence["overturned"]["status"] == STATUS_UNVERIFIABLE,
+          "and the overturned verdict is kept, so the reversal is auditable")
+
+    stale = apply_life_evidence(
+        unverifiable, {"youtube": _youtube_signal("2019-06-28T00:00:00Z")},
+        now=now)
+    check(stale.status == STATUS_UNVERIFIABLE,
+          "a video from 2019 says nothing about today — retirement stands")
+
+    none = apply_life_evidence(unverifiable, {"youtube": _youtube_signal()},
+                               now=now)
+    check(none.status == STATUS_UNVERIFIABLE, "no videos, no reprieve")
+
+    closed = verdict_from_reason(CLOSED_REASON)
+    still_closed = apply_life_evidence(
+        closed, {"youtube": _youtube_signal("2026-06-01T00:00:00Z")}, now=now)
+    check(still_closed.status == STATUS_CLOSED,
+          "a recent video NEVER reopens a cafe Google says is closed — "
+          "first-party status outranks our inference")
+
+
+def test_life_evidence_survives_a_plain_run() -> None:
+    """The revival must not depend on passing --recheck.
+
+    The evidence-free path exists so silence cannot acquit a retired cafe.
+    But a recent video is not silence, so it has to reach through that guard —
+    without letting it reopen a `closed` one.
+    """
+    print("\nrevival on the plain path")
+    with tempfile.TemporaryDirectory() as tmp:
+        store = RosterStore(Path(tmp) / "v.db")
+        live = make_cafe("osm:node:live", "Still Filmed Cafe")
+        shut = make_cafe("osm:node:shut", "Shut Cafe")
+        store.upsert_cafe(live)
+        store.upsert_cafe(shut)
+        # The clobbered state: no `places:` reason left to replay.
+        for cafe in (live, shut):
+            store.set_signals(cafe.cafe_id,
+                              youtube=_youtube_signal("2026-06-01T00:00:00Z"),
+                              errors=["youtube search 'x': timeout"])
+        store.set_status(live.cafe_id, STATUS_UNVERIFIABLE, "low",
+                         "drift refusal", {"source": "google_places"})
+        store.set_status(shut.cafe_id, STATUS_CLOSED, "high",
+                         "CLOSED_PERMANENTLY", {"source": "google_places"})
+
+        run_lifecycle_pass(store, now="2026-08-19T00:00:00Z")
+        check(store.get_cafe(live.cafe_id).status == STATUS_ACTIVE,
+              "an unverifiable cafe with recent video revives without --recheck")
+        check(store.get_cafe(shut.cafe_id).status == STATUS_CLOSED,
+              "a closed cafe with recent video stays closed")
+
+        # And it is stable: a second run must not oscillate.
+        run_lifecycle_pass(store, now="2026-08-19T00:00:00Z")
+        check(store.get_cafe(live.cafe_id).status == STATUS_ACTIVE,
+              "and the revival is stable across re-runs")
+
+
 def main() -> int:
     for test in (test_verdicts_from_evidence, test_verdict_from_live_match,
                  test_assess_prefers_cheapest_evidence,
@@ -633,7 +716,9 @@ def main() -> int:
                  test_selection_prefers_reviewed_cafes,
                  test_export_shape, test_export_never_fabricates,
                  test_export_joins_the_video_corpus,
-                 test_export_writes_the_file):
+                 test_export_writes_the_file,
+                 test_recent_video_overturns_unverifiable,
+                 test_life_evidence_survives_a_plain_run):
         test()
     print()
     if _failures:
