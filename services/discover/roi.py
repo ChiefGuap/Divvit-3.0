@@ -106,6 +106,12 @@ def _percentile_ranks(values: list[Optional[float]]) -> list[Optional[float]]:
     return [None if v is None else rank(v) for v in values]
 
 
+# Public alias: services/venues/brand_health.py ranks cafe cohorts with the
+# same percentile machinery, and the missing-vs-zero contract must be shared,
+# not re-implemented.
+percentile_ranks = _percentile_ranks
+
+
 def score_corpus(videos: list[DiscoveredVideo]) -> dict[str, VideoScores]:
     """Score every video against the rest of the corpus.
 
