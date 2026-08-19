@@ -191,6 +191,36 @@ def cmd_build(args) -> int:
     return 0
 
 
+def cmd_review(args) -> int:
+    """The repeatable editor-eval loop: plan against every refreshed profile,
+    score against the trend-derived checklist, render one passing plan.
+
+    No TwelveLabs calls — plans use the heuristic moment fallback, so this can
+    run on a schedule with no API key and no budget implications.
+    """
+    from services.create.review import run_review, write_report
+
+    if not Path(args.profiles).exists():
+        print(f"error: no profiles at {args.profiles} — run "
+              "`python -m services.discover.trend_style profiles --json-out "
+              f"{args.profiles}` first", file=sys.stderr)
+        return 2
+    report = run_review(
+        profiles_path=args.profiles,
+        clips_dir=Path(args.clips_dir),
+        manifest=Path(args.manifest) if args.manifest else None,
+        business=args.business, city=args.city, cuisine=args.cuisine,
+        archetypes=args.archetypes,
+        render_one=not args.no_render,
+        render_dir=args.render_dir)
+    md_path, json_path = write_report(report, args.out_dir)
+    print(f"\n[review] {'PASS' if report.passed else 'FAIL'} — "
+          f"{sum(r.passed for r in report.reviews)}/{len(report.reviews)} "
+          f"archetypes clean")
+    print(f"[review] report: {md_path} (+ {json_path.name})")
+    return 0 if report.passed else 1
+
+
 def cmd_publish(args) -> int:
     from services.create.publish import InstagramPublisher, PublishError
     token = os.environ.get("IG_ACCESS_TOKEN", "")
@@ -256,6 +286,22 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--no-grade", action="store_true",
                    help="skip exposure matching across clips")
     b.set_defaults(func=cmd_build)
+
+    rv = sub.add_parser("review", help="score the editor against the refreshed style profiles")
+    rv.add_argument("--profiles", default="data/style_profiles.json")
+    rv.add_argument("--clips-dir", default="data/create_clips_test",
+                    help="licensed sample clips the eval plans cut from")
+    rv.add_argument("--manifest", help="defaults to <clips-dir>/manifest.json")
+    rv.add_argument("--business", default="Review Test Cafe")
+    rv.add_argument("--city", default="San Diego")
+    rv.add_argument("--cuisine", default="cafe")
+    rv.add_argument("--archetypes", nargs="*",
+                    help="restrict the review (default: every profile with n >= 2)")
+    rv.add_argument("--out-dir", default="data/reports")
+    rv.add_argument("--render-dir", default="data/create_out/review")
+    rv.add_argument("--no-render", action="store_true",
+                    help="skip the proving render (plans + scoring only)")
+    rv.set_defaults(func=cmd_review)
 
     pub = sub.add_parser("publish", help="publish a rendered video to Instagram Reels")
     pub.add_argument("--video-url", help="public HTTPS URL of the rendered mp4")
