@@ -126,6 +126,9 @@ def cmd_metrics(args) -> int:
           f"({tally['videos_found']} relevant videos), "
           f"{tally['google_measured']} with a review signal, "
           f"{tally['google_absent']} review-absent")
+    if places is not None:
+        print(f"[metrics] places: {places.billed_calls} billed calls, "
+              f"{places.cache_hits} served from cache")
     print(f"[metrics] {remaining} cafes still pending — re-run to continue")
     return 0
 
