@@ -250,9 +250,57 @@ def test_confidence_lifts() -> None:
           "without reviews the same cafes cap at medium — the pre-key state")
 
 
+def test_thin_scores_are_not_ranked() -> None:
+    """Measured 2026-08-19: the first county-wide ranking put eight
+    review-only cafes above the most-filmed cafe in Orange County.
+
+    Renormalizing over present components keeps the scale honest within a
+    cafe but not between cafes — one component scored against four, both on
+    a 0-100 axis. A thin score is still real; it just is not a league entry.
+    """
+    print("\nrankability")
+    rich = make_cafe(cafe_id="osm:node:rich", name="Well Filmed Cafe")
+    thin = make_cafe(cafe_id="osm:node:thin", name="Only Reviewed Cafe")
+    others = [make_cafe(cafe_id=f"osm:node:{i}", name=f"Cafe {i}")
+              for i in range(3)]
+
+    signals = {
+        rich.cafe_id: {
+            "youtube": {"video_count": 9, "videos": [
+                {"views": 10000, "likes": 1200, "comments": 100,
+                 "published_at": "2026-08-15T00:00:00Z"}]},
+            "google": {"rating": 4.9, "review_count": 3554}},
+        # Nothing but a strong rating — the shape that topped the broken table.
+        thin.cafe_id: {"google": {"rating": 5.0, "review_count": 5000}},
+    }
+    for i, c in enumerate(others):
+        signals[c.cafe_id] = {
+            "youtube": {"video_count": 1, "videos": [
+                {"views": 100, "likes": 1, "comments": 0,
+                 "published_at": "2024-01-01T00:00:00Z"}]},
+            "google": {"rating": 3.5, "review_count": 10}}
+
+    results = score_roster([rich, thin] + others, signals)
+    by_id = {h.cafe_id: h for h in results}
+
+    check(by_id[thin.cafe_id].score is not None,
+          "a review-only cafe still gets a score — it is a real measurement")
+    check(not by_id[thin.cafe_id].rankable,
+          "but it is not rankable against fully-measured cafes")
+    check(by_id[rich.cafe_id].rankable,
+          "a fully-measured cafe is rankable")
+
+    ranked = [h for h in results if h.rankable]
+    check(ranked[0].cafe_id == rich.cafe_id,
+          "the most-measured cafe tops the ranking, not the thinnest one")
+    check(all("min_coverage_to_rank" in h.assumptions for h in results),
+          "the threshold travels in assumptions, so the cut is auditable")
+
+
 def main() -> int:
     for test in (test_geometry, test_identity_gates, test_signal_shape,
-                 test_store, test_confidence_lifts):
+                 test_store, test_confidence_lifts,
+                 test_thin_scores_are_not_ranked):
         test()
     print()
     if _failures:

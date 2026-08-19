@@ -62,6 +62,23 @@ RECENCY_HALF_LIFE_DAYS = 90.0
 CONFIDENCE_HIGH_COVERAGE = 0.90
 CONFIDENCE_MEDIUM_COVERAGE = 0.50
 
+# A score is renormalized over whichever components were measurable, which
+# keeps the scale honest *within* a cafe but not *between* cafes: a cafe
+# measured on reviews alone is scored on one component and a fully-measured
+# cafe on four, yet both come out on the same 0-100 axis.
+#
+# Measured 2026-08-19, and the reason this exists: the first county-wide
+# ranking put eight review-only cafes above Coffee Dose (Costa Mesa), which
+# had 9 videos, 13% engagement AND the highest review signal in the cohort.
+# A well-reviewed cafe nobody films outranking the most-filmed cafe in Orange
+# County is not a defensible thing to put in front of a prospect.
+#
+# So thin scores are still computed and still stored — they are real, and a
+# cafe's own dashboard can show them — but they are not *ranked* against
+# richly-measured ones. 0.5 is the same threshold as `medium` confidence: at
+# least half the model's weight has to have been observed.
+MIN_COVERAGE_TO_RANK = 0.50
+
 
 @dataclass
 class BrandHealth:
@@ -70,6 +87,10 @@ class BrandHealth:
     city: str
     score: Optional[float]          # 0-100, None when nothing was measurable
     confidence: str                 # low | medium | high | none
+    # Enough of the model was observed to compare this cafe against others.
+    # A thin score is still a real measurement of what we saw; it just is not
+    # a league-table entry. See MIN_COVERAGE_TO_RANK.
+    rankable: bool = False
     components: dict[str, dict[str, Any]] = field(default_factory=dict)
     assumptions: dict[str, Any] = field(default_factory=dict)
 
@@ -210,10 +231,12 @@ def score_roster(cafes: list[CafeRecord],
             city=cafe.city,
             score=score,
             confidence=_confidence(coverage) if score is not None else "none",
+            rankable=score is not None and coverage >= MIN_COVERAGE_TO_RANK,
             components=components,
             assumptions={
                 "weights": WEIGHTS,
                 "coverage": coverage,
+                "min_coverage_to_rank": MIN_COVERAGE_TO_RANK,
                 "cohort_size": cohort_size,
                 "cohort": "independent cafes measured in this county roster",
                 "recency_half_life_days": RECENCY_HALF_LIFE_DAYS,

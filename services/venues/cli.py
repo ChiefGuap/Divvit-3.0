@@ -37,7 +37,8 @@ from services.discover.harvest import Harvester, HarvestFilters    # noqa: E402
 from services.discover.queries import business_queries             # noqa: E402
 from services.discover.store import CorpusStore                    # noqa: E402
 from services.discover.store import DEFAULT_DB as CORPUS_DB        # noqa: E402
-from services.venues.brand_health import score_roster              # noqa: E402
+from services.venues.brand_health import (                          # noqa: E402
+    MIN_COVERAGE_TO_RANK, score_roster)
 from services.venues.overpass import (                             # noqa: E402
     DEFAULT_CACHE_DIR, OverpassError, fetch_county_cafes)
 from services.venues.roster import (                               # noqa: E402
@@ -90,14 +91,25 @@ def cmd_roster(args) -> int:
 
 
 def cmd_metrics(args) -> int:
+    from .places import PlacesClient
+
     store = RosterStore(args.db)
     corpus = CorpusStore(args.corpus_db)
+
+    # Use Places when a key is present so one pass fills every component.
+    # Without this the video pass re-attempts Yelp per cafe and collects 130
+    # identical 403s, which is neither polite nor informative.
+    places = PlacesClient()
+    if not places.available()[0] or args.no_places:
+        places = None
+        print("[metrics] no Places key — review component will stay dark")
+
     try:
         tally = run_metrics_pass(
             store, corpus=corpus,
             connector=YtDlpConnector(short_form_only=False),
             limit=args.limit, skip_yelp=args.skip_yelp,
-            pause_seconds=args.pause)
+            places_client=places, pause_seconds=args.pause)
     except ConnectorError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -106,8 +118,8 @@ def cmd_metrics(args) -> int:
     print(f"[metrics] attempted {tally['attempted']} cafes: "
           f"{tally['youtube_measured']} measured on youtube "
           f"({tally['videos_found']} relevant videos), "
-          f"{tally['yelp_measured']} with yelp signal, "
-          f"{tally['yelp_absent']} yelp-absent")
+          f"{tally['google_measured']} with a review signal, "
+          f"{tally['google_absent']} review-absent")
     print(f"[metrics] {remaining} cafes still pending — re-run to continue")
     return 0
 
@@ -169,20 +181,30 @@ def cmd_health(args) -> int:
                               health.components, health.assumptions)
 
     scored = [h for h in results if h.score is not None]
-    print(f"\nBrand Health — {len(scored)} scored of {len(cafes)} independent "
-          f"cafes ({len(cafes) - len(results)} unmeasured, no score)\n")
+    ranked = [h for h in scored if h.rankable]
+    thin = len(scored) - len(ranked)
+
+    print(f"\nBrand Health — {len(ranked)} ranked of {len(cafes)} independent "
+          f"cafes ({len(cafes) - len(results)} unmeasured, {thin} measured too "
+          "thinly to compare)\n")
     print(f"{'#':>3}  {'score':>5}  conf    {'vids':>4}  {'eng%':>5}  "
-          f"{'yelp':>9}  name / city")
-    for i, h in enumerate(scored[:args.top], 1):
+          f"{'reviews':>9}  name / city")
+    for i, h in enumerate(ranked[:args.top], 1):
         c = h.components
         vids = c["social_volume"].get("raw")
         eng = c["engagement_quality"].get("raw")
-        yelp_raw = c["review_signal"].get("raw")
+        review_raw = c["review_signal"].get("raw")
         print(f"{i:>3}  {h.score:>5.1f}  {h.confidence:<6}  "
               f"{_fmt(None if vids is None else int(vids), 4)}  "
               f"{'-'.rjust(5) if eng is None else f'{100 * eng:>4.1f}%'}  "
-              f"{'-'.rjust(9) if yelp_raw is None else f'{yelp_raw:>9.2f}'}  "
+              f"{'-'.rjust(9) if review_raw is None else f'{review_raw:>9.2f}'}  "
               f"{h.name} / {h.city or '?'}")
+
+    if thin:
+        print(f"\n  {thin} cafes scored below {int(100 * MIN_COVERAGE_TO_RANK)}% "
+              "coverage are held out of the ranking — their score is real but "
+              "built\n  on too little to compare against a fully-measured cafe. "
+              "Run `metrics` to fill them in.")
 
     if not args.no_report:
         path = _write_report(store, results)
@@ -281,6 +303,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=None,
                    help="max cafes this run (resumes next run)")
     p.add_argument("--skip-yelp", action="store_true")
+    p.add_argument("--no-places", action="store_true",
+                   help="skip the review lookup even when a key is present")
     p.add_argument("--pause", type=float, default=1.5,
                    help="seconds between cafes")
     p.set_defaults(func=cmd_metrics)
