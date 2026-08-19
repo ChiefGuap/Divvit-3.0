@@ -101,6 +101,12 @@ class Verdict:
     def is_active(self) -> bool:
         return self.status == STATUS_ACTIVE
 
+    @property
+    def is_evidence_free(self) -> bool:
+        """"We have nothing to say about this cafe" — distinct from "we looked
+        and it seems fine". Only the latter may overturn a prior verdict."""
+        return (self.evidence or {}).get("source") == "none"
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -283,22 +289,41 @@ def run_lifecycle_pass(roster: Any, places_client: Any = None,
     evidence, so re-running produces the same states. Transitions are counted
     and returned, which is how a run reports "3 cafes reopened" rather than
     only ever reporting retirements.
+
+    One asymmetry makes that true across *different* invocations, and it was
+    a live bug before it was a rule. A retirement can be recorded by a run
+    with `--recheck` (which reaches Places for cafes whose stored reason was
+    clobbered) and then the next plain run finds no stored reason at all,
+    produces `ACTIVE_NO_EVIDENCE`, and silently un-retires 26 cafes. So an
+    evidence-free verdict never overwrites an existing non-active state: it
+    means "we have nothing to say", not "we looked and it is fine", and only
+    the second of those is entitled to overturn a recorded finding.
     """
     checked_at = now or _utcnow()
     signals = roster.all_signals()
     cafes = roster.cafes(include_inactive=True, limit=limit)
 
     tally: dict[str, Any] = {
-        "assessed": 0, "changed": 0, "unchanged": 0,
+        "assessed": 0, "changed": 0, "unchanged": 0, "held": 0,
         STATUS_ACTIVE: 0, STATUS_CLOSED: 0, STATUS_UNVERIFIABLE: 0,
         "transitions": {}, "reactivated": 0, "retired": 0,
     }
     for cafe in cafes:
         verdict = assess_cafe(cafe, signals.get(cafe.cafe_id), places_client)
+        before = cafe.status or STATUS_ACTIVE
+
+        if verdict.is_evidence_free and before != STATUS_ACTIVE:
+            # Silence is not an acquittal. Keep the recorded verdict, its
+            # evidence and its original date untouched.
+            tally["assessed"] += 1
+            tally[before] += 1
+            tally["held"] += 1
+            tally["unchanged"] += 1
+            continue
+
         tally["assessed"] += 1
         tally[verdict.status] += 1
 
-        before = cafe.status or STATUS_ACTIVE
         if before != verdict.status:
             tally["changed"] += 1
             key = f"{before}->{verdict.status}"

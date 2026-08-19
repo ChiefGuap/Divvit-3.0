@@ -37,7 +37,7 @@ bar and walk into a prospect ranking. Fifteen of them had.
 | `services/venues/brand_health.py` | `score_roster` drops non-active cafes itself — the second lock |
 | `services/venues/social.py` | `run_metrics_pass(with_review_signal=…)` |
 | `services/venues/cli.py` | `lifecycle` command (`--recheck`, `--dry-run`), `metrics --only-reviewed`, `health --include-inactive`, rewritten `export` |
-| `services/venues/tests/test_lifecycle.py` | **new** — 93 no-network checks |
+| `services/venues/tests/test_lifecycle.py` | **new** — 97 no-network checks |
 
 ### Three states, not two
 
@@ -69,6 +69,17 @@ the roster on the next assessment rather than stay retired on stale evidence.
   evidence, so a re-run changes nothing; new evidence moves a cafe back to
   `active` and the run reports it as a reactivation rather than only ever
   reporting retirements.
+* **Silence is not an acquittal** — an evidence-free verdict never overwrites
+  a non-active state. This was found by running the pass a second time
+  against the live roster after it had already been applied. Retirements
+  recorded via `--recheck` rest on a Places lookup, and 26 of them had no
+  stored reason left for a plain re-run to replay; that run produced "no
+  contrary evidence" for each and un-retired all 26 (262 → 288 active). The
+  fix distinguishes "we have nothing to say" from "we looked and it is fine"
+  and lets only the second overturn a recorded finding. Verified after the
+  fix: `lifecycle` and `lifecycle --recheck` now both leave 262/21/76
+  unchanged, and the original evidence and assessment date survive intact.
+  Positive evidence still reactivates, so it did not become a one-way door.
 * **An Overpass refresh cannot resurrect a closed cafe.** The status columns
   sit outside the OSM-derived column set `upsert_cafe` overwrites. OSM is
   precisely the stale source this exists to correct; letting it write back
@@ -192,7 +203,7 @@ snapshot history stays in the DB and its most recent timestamp rides along as
 
 ## Tests
 
-`services/venues/tests/test_lifecycle.py`, 93 checks, no network, no keys, in
+`services/venues/tests/test_lifecycle.py`, 97 checks, no network, no keys, in
 the existing `check()` style. All nine suites pass:
 
 ```
@@ -206,9 +217,10 @@ the store, the scorer, the queues *and* the export, including the cohort-size
 check), and a null read as a zero. Also covered: the confidence split between
 permanent and temporary closures, a drift refusal classified as unverifiable
 rather than closed, an unparseable reason retiring nobody, idempotent
-re-runs, reactivation, an Overpass refresh failing to resurrect a retired
-cafe, the review-first selection, the `discover.db` video join and its
-fallback, and timestamp normalization.
+re-runs, reactivation, an evidence-free verdict failing to overturn a
+retirement, an Overpass refresh failing to resurrect a retired cafe, the
+review-first selection, the `discover.db` video join and its fallback, and
+timestamp normalization.
 
 The stored `places:` reason strings are pinned verbatim in the test file,
 because parsing them is how a lifecycle pass replays a finding without

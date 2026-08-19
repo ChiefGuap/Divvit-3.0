@@ -115,6 +115,13 @@ Three properties this pass is built around:
   pure function of the stored evidence, so re-running changes nothing; new
   evidence (a temporary closure lifting, a rename Google catches up with)
   moves a cafe back to `active` and the run reports it as a reactivation.
+* **Silence is not an acquittal.** An evidence-free verdict never overwrites
+  an existing non-active state. This was a live bug first: retirements
+  recorded by a `--recheck` run rest on a Places lookup, and 26 of them had no
+  stored reason for the *next* plain run to replay — which duly produced "no
+  contrary evidence" and un-retired all 26. "We have nothing to say" and "we
+  looked and it is fine" are different findings, and only the second may
+  overturn a recorded one.
 * **An Overpass refresh cannot resurrect a closed cafe.** The status columns
   are deliberately outside the OSM-derived column set that `upsert_cafe`
   overwrites. OSM is exactly the stale source this exists to correct, so

@@ -232,6 +232,51 @@ def test_pass_is_idempotent_and_reversible() -> None:
               "--dry-run writes nothing")
 
 
+def test_silence_does_not_acquit() -> None:
+    """A live bug before it was a rule.
+
+    A retirement can be recorded by a `--recheck` run, which reaches Places
+    for cafes whose stored reason a later write clobbered. The next plain run
+    finds no stored reason at all, produces the evidence-free verdict, and —
+    before this — silently un-retired 26 cafes on the OC roster.
+    """
+    print("\nevidence-free verdicts cannot overturn a finding")
+    with tempfile.TemporaryDirectory() as tmp:
+        store = RosterStore(Path(tmp) / "v.db")
+        cafe = make_cafe("osm:node:shut", "Shut Cafe")
+        store.upsert_cafe(cafe)
+        # Exactly the --recheck state: retired from a live lookup, with no
+        # `places:` reason left on cafe_signals to replay next time.
+        store.set_signals(cafe.cafe_id, errors=["youtube search 'x': timeout"])
+        store.set_status(cafe.cafe_id, STATUS_CLOSED, confidence="high",
+                         reason="Google reports it as CLOSED_PERMANENTLY",
+                         evidence={"business_status": "CLOSED_PERMANENTLY"},
+                         checked_at="2026-08-19T00:00:00+00:00")
+
+        tally = run_lifecycle_pass(store, now="2026-08-20T00:00:00+00:00")
+        record = store.cafes(include_inactive=True)[0]
+        check(record.status == STATUS_CLOSED,
+              "a run that finds NO evidence leaves the retirement standing — "
+              "silence is not an acquittal")
+        check(tally["held"] == 1 and tally["reactivated"] == 0,
+              "and the run reports it as held, not as a reactivation")
+        check(record.status_checked_at == "2026-08-19T00:00:00+00:00"
+              and record.status_evidence.get("business_status")
+              == "CLOSED_PERMANENTLY",
+              "the original evidence and its date are left untouched, so the "
+              "finding does not silently age into a fresher-looking one")
+
+        # Real counter-evidence still wins — this must not become a one-way
+        # door, or a reopened cafe can never come back.
+        store.set_signals(cafe.cafe_id,
+                          google={"rating": 4.4, "review_count": 60,
+                                  "business_status": "OPERATIONAL"})
+        again = run_lifecycle_pass(store, now="2026-08-21T00:00:00+00:00")
+        check(again["reactivated"] == 1,
+              "but positive evidence still reactivates — the rule blocks "
+              "absence of evidence, not evidence")
+
+
 def test_roster_refresh_does_not_resurrect() -> None:
     print("\nroster refresh vs lifecycle")
     with tempfile.TemporaryDirectory() as tmp:
@@ -582,6 +627,7 @@ def main() -> int:
     for test in (test_verdicts_from_evidence, test_verdict_from_live_match,
                  test_assess_prefers_cheapest_evidence,
                  test_pass_is_idempotent_and_reversible,
+                 test_silence_does_not_acquit,
                  test_roster_refresh_does_not_resurrect,
                  test_retired_cafes_never_reach_a_ranking,
                  test_selection_prefers_reviewed_cafes,
