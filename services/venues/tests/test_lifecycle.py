@@ -451,6 +451,10 @@ def test_export_shape() -> None:
         check("rankable" in health and "confidence" in health,
               "rankable and confidence travel with the score, so a consumer "
               "cannot show a thin score as a league position by accident")
+        check(health["computed_at"] == payload["generated_at"],
+              "the score is computed fresh at export time, so its percentiles "
+              "match the cohort in this very file — not a stored snapshot "
+              "normalized against a different night's roster")
 
         retired = payload["retired"][0]
         check(retired["status"]["state"] == STATUS_CLOSED

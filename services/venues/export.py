@@ -71,7 +71,12 @@ present so the schema is stable, null so nobody mistakes it for a measurement.
         "score":       float|null,    # 0-100, null when nothing was measurable
         "confidence":  "high"|"medium"|"low"|"none",
         "rankable":    bool,          # false = real score, too thin to compare
-        "captured_at": ISO-8601 UTC|null,
+        "computed_at": ISO-8601 UTC,  # == generated_at; the score is computed
+                                      # fresh at export time, not read from
+                                      # brand_health_snapshots, so percentiles
+                                      # always match the cafes in this file
+        "previous_snapshot_at": ISO-8601 UTC|null,  # last stored snapshot,
+                                      # for "are we improving" over time
         "components":  {              # one entry per weighted component
           "<component>": {"raw": float|null, "percentile": float|null,
                           "weight": float, "status": "absent"|null}
@@ -320,7 +325,8 @@ def _health_block(health: Any) -> Optional[dict[str, Any]]:
         "score": health.score,
         "confidence": health.confidence,
         "rankable": bool(health.rankable),
-        "captured_at": None,
+        "computed_at": None,
+        "previous_snapshot_at": None,
         "components": health.components,
         "assumptions": health.assumptions,
     }
@@ -328,11 +334,22 @@ def _health_block(health: Any) -> Optional[dict[str, Any]]:
 
 def cafe_row(cafe: CafeRecord, signals: Optional[dict[str, Any]],
              health: Any, videos: list[dict[str, Any]],
-             captured_at: Optional[str] = None) -> dict[str, Any]:
-    """One cafe in the documented export shape."""
+             computed_at: Optional[str] = None,
+             previous_snapshot_at: Optional[str] = None) -> dict[str, Any]:
+    """One cafe in the documented export shape.
+
+    The score is recomputed here rather than read back from
+    `brand_health_snapshots`. Brand Health is percentile-normalized within
+    the measured cohort, and the cohort in this file is the *active* roster —
+    a stored snapshot was computed against whatever cohort existed that night,
+    so mixing the two would put scores from two different distributions on the
+    same axis. The snapshot history stays where it belongs, in the DB, and its
+    most recent timestamp travels as `previous_snapshot_at`.
+    """
     block = _health_block(health)
     if block is not None:
-        block["captured_at"] = _iso(captured_at)
+        block["computed_at"] = _iso(computed_at)
+        block["previous_snapshot_at"] = _iso(previous_snapshot_at)
     return {
         "cafe_id": cafe.cafe_id,
         "name": cafe.name,
@@ -380,8 +397,10 @@ def build_export(store: Any, corpus_db: Path | str = DEFAULT_CORPUS_DB,
             if videos is None:
                 videos = _videos_from_signal((sig or {}).get("youtube"))
             snap = snapshots.get(cafe.cafe_id) or {}
-            out.append(cafe_row(cafe, sig, health_by_id.get(cafe.cafe_id),
-                                videos, captured_at=snap.get("captured_at")))
+            out.append(cafe_row(
+                cafe, sig, health_by_id.get(cafe.cafe_id), videos,
+                computed_at=generated_at,
+                previous_snapshot_at=snap.get("captured_at")))
         return out
 
     active_rows = rows(active)
