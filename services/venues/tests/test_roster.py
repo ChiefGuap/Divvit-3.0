@@ -135,11 +135,13 @@ def test_store() -> None:
         check(len(store.pending_cafes()) == 2,
               "all independents pending before any metrics")
         store.set_signals(a.cafe_id, youtube={"video_count": 0, "videos": []},
-                          yelp=None, errors=["yelp: HTTP 403"])
+                          yelp=None, errors=["yelp: HTTP 403"],
+                          video_checked_at="2026-08-17T00:00:00Z")
         pending = store.pending_cafes()
         check(len(pending) == 1 and pending[0].cafe_id == b.cafe_id,
               "measured cafe leaves the pending queue — re-run resumes")
-        store.set_signals(b.cafe_id, youtube=None, yelp=None)
+        store.set_signals(b.cafe_id, youtube=None, yelp=None,
+                          video_checked_at="2026-08-17T00:00:00Z")
         check(store.pending_cafes() == [],
               "a failed attempt still counts as attempted (no retry loop)")
 

@@ -269,12 +269,37 @@ YELP_CIRCUIT_403S = 5
 
 # -------------------------------------------------------------- metrics pass
 
+def collect_places(cafe: CafeRecord,
+                   client: Any) -> tuple[Optional[dict], Optional[str]]:
+    """Google Places review signal for one cafe, identity-checked.
+
+    Returns (signal, error). The error is kept rather than swallowed so the
+    metrics pass can say *why* a cafe has no review component — "no result"
+    and "matched a business 3km away" are different problems.
+    """
+    from .places import review_signal_from
+
+    match, reason = client.find(cafe.name, city=cafe.city,
+                                latitude=cafe.lat, longitude=cafe.lon)
+    if match is None:
+        return None, reason
+    if not match.is_operational:
+        # Worth recording: the roster inherits OSM's staleness, and pitching
+        # a closed cafe is worse than skipping it.
+        return None, (f"places: '{match.name}' is {match.business_status}")
+    signal = review_signal_from(match)
+    if signal is None:
+        return None, f"places: '{match.name}' has no ratings yet"
+    return signal, None
+
+
 def run_metrics_pass(
     roster: RosterStore,
     corpus: Optional[CorpusStore] = None,
     connector: Optional[YtDlpConnector] = None,
     limit: Optional[int] = None,
     skip_yelp: bool = False,
+    places_client: Any = None,
     pause_seconds: float = 1.5,
     on_status: Callable[[str], None] = print,
 ) -> dict[str, int]:
@@ -287,8 +312,14 @@ def run_metrics_pass(
 
     pending = roster.pending_cafes(limit=limit)
     tally = {"attempted": 0, "youtube_measured": 0, "videos_found": 0,
-             "yelp_measured": 0, "yelp_absent": 0}
+             "yelp_measured": 0, "yelp_absent": 0,
+             "google_measured": 0, "google_absent": 0}
     yelp_403_streak = 0
+
+    # Places supersedes Yelp when a key is present: first-party ratings, and
+    # Yelp was measured blocking us outright.
+    if places_client is not None:
+        skip_yelp = True
 
     for i, cafe in enumerate(pending, 1):
         tally["attempted"] += 1
@@ -324,8 +355,24 @@ def run_metrics_pass(
             tally["yelp_absent"] += 1
             errors.append("yelp: skipped (circuit open after repeated 403s)")
 
+        google = None
+        if places_client is not None:
+            google, places_error = collect_places(cafe, places_client)
+            if google is not None:
+                tally["google_measured"] += 1
+                on_status(f"  google: {google['rating']} stars, "
+                          f"{google['review_count']} reviews")
+            else:
+                tally["google_absent"] += 1
+                errors.append(places_error or "places: absent")
+                on_status(f"  {places_error}")
+
+        now = _utcnow()
         roster.set_signals(cafe.cafe_id, youtube=youtube, yelp=yelp,
-                           errors=errors, collected_at=_utcnow())
+                           google=google, errors=errors,
+                           video_checked_at=now,
+                           reviews_checked_at=now if google is not None else "",
+                           collected_at=now)
         if pause_seconds and i < len(pending):
             time.sleep(pause_seconds)
 

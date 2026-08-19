@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -108,6 +109,50 @@ def cmd_metrics(args) -> int:
           f"{tally['yelp_measured']} with yelp signal, "
           f"{tally['yelp_absent']} yelp-absent")
     print(f"[metrics] {remaining} cafes still pending — re-run to continue")
+    return 0
+
+
+def cmd_reviews(args) -> int:
+    """Backfill the review component over cafes already measured elsewhere."""
+    from .places import PlacesClient
+    from .social import collect_places, _utcnow
+
+    store = RosterStore(args.db)
+    client = PlacesClient(cache_dir=args.cache_dir)
+    ok, why = client.available()
+    if not ok:
+        print(f"error: {why}", file=sys.stderr)
+        return 2
+
+    pending = store.pending_reviews(limit=args.limit)
+    print(f"[reviews] {len(pending)} cafes with no review signal\n")
+
+    measured = absent = 0
+    for i, cafe in enumerate(pending, 1):
+        signal, error = collect_places(cafe, client)
+        now = _utcnow()
+        if signal is not None:
+            measured += 1
+            store.set_signals(cafe.cafe_id, google=signal,
+                              reviews_checked_at=now, collected_at=now)
+            print(f"  {i:>3}. {signal['rating']:>3} stars "
+                  f"{signal['review_count']:>6} reviews  {cafe.name}")
+        else:
+            absent += 1
+            # Record the attempt and the reason. Without this a permanently
+            # closed cafe is "pending" forever, and nobody can audit why a
+            # cafe has no review signal.
+            store.set_signals(cafe.cafe_id, reviews_checked_at=now,
+                              errors=[error or "places: absent"],
+                              collected_at=now)
+            print(f"  {i:>3}. {'—':>3}                     {cafe.name}"
+                  f"   ({error})")
+
+    print(f"\n[reviews] {measured} measured, {absent} absent")
+    print(f"[reviews] {client.billed_calls} billed calls, "
+          f"{client.cache_hits} served from cache")
+    print(f"[reviews] {len(store.pending_reviews())} still without a review "
+          "signal — re-run to continue")
     return 0
 
 
@@ -240,6 +285,12 @@ def build_parser() -> argparse.ArgumentParser:
                    help="seconds between cafes")
     p.set_defaults(func=cmd_metrics)
 
+    p = sub.add_parser("reviews", help="backfill Google Places review signal")
+    common(p)
+    p.add_argument("--limit", type=int, default=None)
+    p.add_argument("--cache-dir", default="data/places")
+    p.set_defaults(func=cmd_reviews)
+
     p = sub.add_parser("health", help="score + rank measured cafes")
     common(p)
     p.add_argument("--top", type=int, default=25)
@@ -264,7 +315,19 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def load_dotenv(path: Path) -> None:
+    """Same contract as the Discover CLI: real environment wins over the file."""
+    if not path.exists():
+        return
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip())
+
+
 def main(argv=None) -> int:
+    load_dotenv(_REPO_ROOT / ".env")
     args = build_parser().parse_args(argv)
     return args.func(args)
 

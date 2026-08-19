@@ -110,8 +110,11 @@ def raw_components(signals: Optional[dict[str, Any]],
     if not signals:
         return None
     youtube = signals.get("youtube")
-    yelp = signals.get("yelp")
-    if youtube is None and yelp is None:
+    # Google Places is preferred over Yelp: first-party ratings, a stable
+    # place_id, and an address to confirm we matched the right business.
+    # Yelp remains a fallback for rows measured before Places was wired in.
+    reviews = signals.get("google") or signals.get("yelp")
+    if youtube is None and reviews is None:
         return None  # attempted but every source failed — no evidence, no score
     now = now or _now()
 
@@ -140,11 +143,11 @@ def raw_components(signals: Optional[dict[str, Any]],
             recency = 0.5 ** (min(ages) / RECENCY_HALF_LIFE_DAYS)
 
     review_signal: Optional[float] = None
-    if yelp is not None and yelp.get("rating") is not None:
-        count = yelp.get("review_count") or 0
+    if reviews is not None and reviews.get("rating") is not None:
+        count = reviews.get("review_count") or 0
         # Rating alone is weak — a 4.9 from 11 reviews is not a 4.9 from
         # 1,100 (design doc §4.4). log10 keeps volume from swamping quality.
-        review_signal = yelp["rating"] * math.log10(1 + count)
+        review_signal = reviews["rating"] * math.log10(1 + count)
 
     return {"social_volume": social_volume, "engagement_quality": engagement,
             "recency": recency, "review_signal": review_signal}
@@ -216,7 +219,9 @@ def score_roster(cafes: list[CafeRecord],
                 "recency_half_life_days": RECENCY_HALF_LIFE_DAYS,
                 "sources": {
                     "youtube": "yt-dlp public search, metadata only",
-                    "yelp": "public page best-effort; absent when blocked",
+                    "reviews": "Google Places (New) v1 — rating and review "
+                               "count, identity-checked against the OSM "
+                               "record; Yelp fallback for older rows",
                     "instagram": "skipped — no unauthenticated access",
                     "tiktok": "skipped — keyword search broken without a key",
                 },

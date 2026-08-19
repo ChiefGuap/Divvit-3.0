@@ -64,6 +64,9 @@ CREATE TABLE IF NOT EXISTS cafe_signals (
     collected_at TEXT,
     youtube      TEXT,   -- JSON summary; NULL = never measured
     yelp         TEXT,   -- JSON {rating, review_count, ...}; NULL = absent
+    google       TEXT,   -- JSON {rating, review_count, place_id, ...}
+    reviews_checked_at TEXT,  -- set even when the lookup found nothing
+    video_checked_at   TEXT,  -- ditto for the video pass
     errors       TEXT    -- JSON array of what degraded during collection
 );
 
@@ -114,6 +117,15 @@ class RosterStore:
                                  ("opening_hours", "TEXT")):
                 if column not in existing:
                     conn.execute(f"ALTER TABLE cafes ADD COLUMN {column} {decl}")
+
+            signal_columns = {r["name"] for r in
+                              conn.execute("PRAGMA table_info(cafe_signals)")}
+            for column, decl in (("google", "TEXT"),
+                                 ("reviews_checked_at", "TEXT"),
+                                 ("video_checked_at", "TEXT")):
+                if column not in signal_columns:
+                    conn.execute(
+                        f"ALTER TABLE cafe_signals ADD COLUMN {column} {decl}")
 
     # ------------------------------------------------------------- roster
     def upsert_cafe(self, cafe: CafeRecord) -> bool:
@@ -207,21 +219,38 @@ class RosterStore:
     # ------------------------------------------------------------ signals
     def set_signals(self, cafe_id: str, youtube: Optional[dict] = None,
                     yelp: Optional[dict] = None,
+                    google: Optional[dict] = None,
+                    reviews_checked_at: str = "",
+                    video_checked_at: str = "",
                     errors: Optional[list[str]] = None,
                     collected_at: str = "") -> None:
-        """Record a metrics attempt. None stays NULL — absent, not zero."""
+        """Record a metrics attempt. None stays NULL — absent, not zero.
+
+        COALESCE on every source means a later pass that measures only one of
+        them (say, backfilling Google over a roster already measured for
+        YouTube) adds to the row instead of blanking the rest.
+        """
         with self._conn() as conn:
             conn.execute(
                 "INSERT INTO cafe_signals (cafe_id, collected_at, youtube,"
-                " yelp, errors) VALUES (?,?,?,?,?)"
+                " yelp, google, reviews_checked_at, video_checked_at,"
+                " errors) VALUES (?,?,?,?,?,?,?,?)"
                 " ON CONFLICT(cafe_id) DO UPDATE SET"
                 " collected_at=excluded.collected_at,"
                 " youtube=COALESCE(excluded.youtube, cafe_signals.youtube),"
                 " yelp=COALESCE(excluded.yelp, cafe_signals.yelp),"
+                " google=COALESCE(excluded.google, cafe_signals.google),"
+                " reviews_checked_at=COALESCE(excluded.reviews_checked_at,"
+                " cafe_signals.reviews_checked_at),"
+                " video_checked_at=COALESCE(excluded.video_checked_at,"
+                " cafe_signals.video_checked_at),"
                 " errors=excluded.errors",
                 (cafe_id, collected_at,
                  json.dumps(youtube) if youtube is not None else None,
                  json.dumps(yelp) if yelp is not None else None,
+                 json.dumps(google) if google is not None else None,
+                 reviews_checked_at or None,
+                 video_checked_at or None,
                  json.dumps(errors) if errors else None))
 
     def get_signals(self, cafe_id: str) -> Optional[dict[str, Any]]:
@@ -235,16 +264,50 @@ class RosterStore:
             rows = conn.execute("SELECT * FROM cafe_signals").fetchall()
         return {r["cafe_id"]: self._signals_from_row(r) for r in rows}
 
+    def pending_reviews(self, limit: Optional[int] = None) -> list[CafeRecord]:
+        """Independents whose review signal is still dark.
+
+        Separate from `pending_cafes` because the two backfill different
+        things: that one finds cafes never measured at all, this one finds
+        cafes measured before a review source existed. Yelp being blocked left
+        120 rows in exactly that state, and re-running the whole metrics pass
+        to fill one column would re-scrape YouTube for no reason.
+        """
+        # LEFT JOIN, so this covers both "measured before a review source
+        # existed" and "never measured at all". Review signal is one fast
+        # request; the video pass is ~15s of yt-dlp per cafe. Decoupling them
+        # means the whole roster can carry a review score long before the
+        # slower pass finishes.
+        sql = ("SELECT c.* FROM cafes c LEFT JOIN cafe_signals s"
+               " ON s.cafe_id = c.cafe_id"
+               " WHERE c.is_chain = 0 AND s.google IS NULL"
+               " AND s.reviews_checked_at IS NULL"
+               " ORDER BY c.cafe_id")
+        params: list[Any] = []
+        if limit:
+            sql += " LIMIT ?"
+            params.append(limit)
+        with self._conn() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [self._cafe_from_row(r) for r in rows]
+
     def pending_cafes(self, limit: Optional[int] = None) -> list[CafeRecord]:
-        """Independents with no metrics attempt yet, in cafe_id order.
+        """Independents with no *video* signal yet, in cafe_id order.
 
         This is the resume contract: the metrics pass takes `pending_cafes()`,
         so a re-run continues where the last one stopped instead of
         re-measuring cafe #1 forever.
+
+        Keyed on an explicit `video_checked_at` rather than on the row's
+        existence, because the review pass now writes a row for every cafe it
+        checks — "has a signals row" stopped meaning "has been measured" the
+        moment the two passes were decoupled. Keying on `youtube IS NULL`
+        instead would be worse: a cafe whose video measurement *failed* would
+        be retried on every run, forever.
         """
         sql = ("SELECT c.* FROM cafes c LEFT JOIN cafe_signals s"
                " ON s.cafe_id = c.cafe_id"
-               " WHERE c.is_chain = 0 AND s.cafe_id IS NULL"
+               " WHERE c.is_chain = 0 AND s.video_checked_at IS NULL"
                " ORDER BY c.cafe_id")
         params: list[Any] = []
         if limit:
@@ -323,7 +386,7 @@ class RosterStore:
     @staticmethod
     def _signals_from_row(row: sqlite3.Row) -> dict[str, Any]:
         d = dict(row)
-        for c in ("youtube", "yelp", "errors"):
+        for c in ("youtube", "yelp", "google", "errors"):
             if d.get(c):
                 try:
                     d[c] = json.loads(d[c])
