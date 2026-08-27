@@ -5,7 +5,7 @@
  * measured arrives as `status: "absent"` and is rendered with a null score,
  * not a zero, because a cafe with no review signal is unmeasured rather than
  * badly reviewed. */
-import { COMPONENT_LABELS, COMPONENT_ORDER, leadVenue, type ComponentKey } from "@/lib/queries";
+import { COMPONENT_LABELS, COMPONENT_ORDER, leadVenue, snapshotHistory, type ComponentKey } from "@/lib/queries";
 import type { BrandHealthAction, BrandHealthAspect, BrandHealthView } from "./types";
 import View from "./view";
 
@@ -81,6 +81,7 @@ function actionsFrom(aspects: BrandHealthAspect[]): BrandHealthAction[] {
 export default async function BrandHealthPage() {
   const venue = await leadVenue();
   const snap = venue?.snapshot ?? null;
+  const history = venue ? await snapshotHistory(venue.id) : [];
 
   const aspects: BrandHealthAspect[] = COMPONENT_ORDER.map((key) => {
     const c = snap?.components?.[key];
@@ -100,6 +101,11 @@ export default async function BrandHealthPage() {
   });
 
   const data: BrandHealthView = {
+    // Only points that actually carry a score — an unscored run is a gap in
+    // the series, not a zero.
+    series: history
+      .filter((h) => h.score !== null)
+      .map((h) => ({ at: h.captured_at, score: h.score as number })),
     score: snap?.score ?? null,
     confidence: snap?.confidence ?? "none",
     coverage: snap?.coverage ?? null,

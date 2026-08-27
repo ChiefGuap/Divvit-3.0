@@ -143,22 +143,54 @@ export default function BrandHealthView({ data }: { data: ViewData }) {
       ) : (
         <div style={{
           background: "#fff", borderRadius: 18, padding: "26px 24px",
-          display: "flex", flexDirection: "column", gap: 12,
+          display: "flex", flexDirection: "column", gap: 16,
           boxShadow: "0 0 0 1px rgba(17,24,39,0.07), 0 6px 20px rgba(58,32,137,0.05)",
           ...fadeUp("0.05s", "0.5s"),
         }}>
-          <span style={{ fontSize: 14.5, fontWeight: 700 }}>Not enough history yet</span>
-          <p style={{ margin: 0, color: "#6b7280", fontSize: 13.5, lineHeight: 1.6, maxWidth: 560 }}>
-            Brand Health is stored as an append-only series, so a trend appears
-            here as soon as this venue has been measured more than once. Right
-            now there is a single snapshot
-            {data.capturedAt ? ` (taken ${new Date(data.capturedAt).toLocaleDateString()})` : ""},
-            and drawing a twelve-week line through one point would be inventing
-            eleven of them.
-          </p>
-          <p style={{ margin: 0, color: "#9ca3af", fontSize: 12.5 }}>
-            Re-run <code>services.venues.cli metrics</code> and <code>health</code> to add a point.
-          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <span style={{ fontSize: 14.5, fontWeight: 700 }}>Score over time</span>
+            <span style={{ fontSize: 12.5, color: "#6b7280" }}>
+              {data.series.length < 2
+                ? "One measurement so far — a trend appears once this venue has been measured twice."
+                : `${data.series.length} measurement runs, oldest first. Points are runs, not weeks.`}
+            </span>
+          </div>
+
+          {data.series.length >= 2 ? (
+            <>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 150 }}>
+                {data.series.map((pt, i) => {
+                  const lo = Math.min(...data.series.map((p) => p.score));
+                  const hi = Math.max(...data.series.map((p) => p.score));
+                  // A flat series must not collapse to zero-height bars.
+                  const span = hi - lo || 1;
+                  const h = 26 + ((pt.score - lo) / span) * 104;
+                  const last = i === data.series.length - 1;
+                  return (
+                    <div key={pt.at + i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: last ? "#4b29b4" : "#9ca3af" }}>
+                        {pt.score.toFixed(1)}
+                      </span>
+                      <span style={{
+                        width: "100%", maxWidth: 46, height: h, borderRadius: 8,
+                        background: last ? "#6346cd" : "#b79aff",
+                        animation: `dvGrowBar 0.7s ${(0.04 * i).toFixed(2)}s ${EASE} backwards`,
+                      }} />
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: "#9ca3af" }}>
+                <span>{new Date(data.series[0].at).toLocaleString()}</span>
+                <span>{new Date(data.series[data.series.length - 1].at).toLocaleString()}</span>
+              </div>
+            </>
+          ) : (
+            <p style={{ margin: 0, color: "#6b7280", fontSize: 13.5, lineHeight: 1.6, maxWidth: 560 }}>
+              Brand Health is stored as an append-only series. Re-run{" "}
+              <code>services.venues.cli metrics</code> and <code>health</code> to add a point.
+            </p>
+          )}
         </div>
       )}
     </>

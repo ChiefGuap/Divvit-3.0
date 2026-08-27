@@ -19,7 +19,10 @@ export type BrandHealthAction = {
   tileBg: string;
 };
 
+export type SeriesPoint = { at: string; score: number };
+
 export type BrandHealthView = {
+  series: SeriesPoint[];
   score: number | null;
   confidence: string;
   coverage: number | null;

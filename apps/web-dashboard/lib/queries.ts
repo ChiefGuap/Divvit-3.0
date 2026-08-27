@@ -255,3 +255,26 @@ export function compactCount(n: number | null | undefined): string {
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return String(n);
 }
+
+export type SnapshotPoint = { captured_at: string; score: number | null; confidence: string; coverage: number | null };
+
+/**
+ * A venue's score over time, oldest first.
+ *
+ * Snapshots are append-only, so this is a real series — but it is a series of
+ * *measurement runs*, not of weeks. Two runs on the same evening are two
+ * points an hour apart, and labelling them as weekly would be a lie about
+ * cadence. Callers should render the actual timestamps.
+ */
+export async function snapshotHistory(businessId: string, limit = 24): Promise<SnapshotPoint[]> {
+  const supabase = await db();
+  const { data, error } = await supabase
+    .from("brand_health_snapshots")
+    .select("captured_at, score, confidence, coverage")
+    .eq("business_id", businessId)
+    .order("captured_at", { ascending: true })
+    .limit(limit);
+
+  if (error) throw new Error(`snapshotHistory: ${error.message}`);
+  return data ?? [];
+}
