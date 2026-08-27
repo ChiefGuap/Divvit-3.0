@@ -10,3 +10,6 @@ data/
 
 # Generated seed SQL — large, derived from data/ which is already ignored.
 data/seed/
+
+# Supabase CLI local state (link artifacts, not source)
+supabase/.temp/
