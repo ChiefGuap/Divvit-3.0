@@ -7,3 +7,6 @@ __pycache__
 .env.local
 .venv
 data/
+
+# Generated seed SQL — large, derived from data/ which is already ignored.
+data/seed/
