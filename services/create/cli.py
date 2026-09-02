@@ -246,6 +246,68 @@ def cmd_publish(args) -> int:
     return 0
 
 
+def cmd_fonts(args) -> int:
+    """The font library: what we can ship, what is downloaded, what gets picked."""
+    from services.create.fonts import (
+        CATALOG, FontLibrary, ROLES, apply_font, catalog_rows, choose)
+
+    library = FontLibrary(args.dir)
+
+    if args.action == "install":
+        keys = [k.strip() for k in (args.keys or "").split(",") if k.strip()] or None
+        print(f"[fonts] installing into {library.root}")
+        report = library.install(keys=keys, force=args.force, on_status=print)
+        print(f"\n[fonts] {report.summary()}")
+        for err in report.errors:
+            print(f"    ! {err}")
+        return 0 if not report.failed else 1
+
+    if args.action == "catalog":
+        print(f"\n{len(CATALOG)} faces available to install, all SIL OFL 1.1\n")
+        for role, note in ROLES.items():
+            print(f"  {role} — {note}")
+            for row in [r for r in catalog_rows() if r["role"] == role]:
+                flags = ", ".join(f for f, on in
+                                  (("caps only", row["caps_only"]),
+                                   ("condensed", row["condensed"])) if on)
+                print(f"      {row['key']:<18} {row['family']} {row['face']}"
+                      + (f"  ({flags})" if flags else ""))
+            print()
+        return 0
+
+    if args.action == "choose":
+        style = type("S", (), {"description": args.description})()
+        font = choose(archetype=args.archetype, caption_description=args.description,
+                      slot_role=args.slot, library=library)
+        if not font:
+            print("no installed font fits — run `fonts install` first", file=sys.stderr)
+            return 1
+        print(f"\narchetype {args.archetype or '-'} · slot {args.slot or '-'}"
+              f" -> {font.family} {font.face}")
+        print(f"  role      {font.role}")
+        print(f"  ink       {font.ink}  ({'hook-ready' if font.display_ready else 'body only'})")
+        print(f"  file      {font.file}")
+        print(f"  licence   {font.licence}\n")
+        return 0
+
+    # list
+    installed = library.installed()
+    if not installed:
+        print("no fonts installed — run `fonts install`", file=sys.stderr)
+        return 1
+    print(f"\n{len(installed)} fonts installed in {library.root}\n")
+    print(f"  {'key':<18}{'family':<24}{'role':<11}{'ink':>6}  for")
+    for font in sorted(installed.values(), key=lambda f: (f.role, -(f.ink or 0))):
+        use = "hooks + body" if font.display_ready else "body only"
+        extra = " · caps only" if font.caps_only else ""
+        print(f"  {font.key:<18}{font.family + ' ' + font.face:<24}{font.role:<11}"
+              f"{(font.ink or 0):>6.1f}  {use}{extra}")
+    print(f"\n  Every face is SIL OFL 1.1; the licence sits beside each file.")
+    print("  'ink' is measured by rendering through ffmpeg, not read off metadata —")
+    print("  single-weight display faces declare Regular while being visually black.\n")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="divvit-create",
                                 description="Divvit Create — assemble postable videos from Collection clips")
@@ -311,6 +373,18 @@ def build_parser() -> argparse.ArgumentParser:
     pub.add_argument("--check", action="store_true",
                      help="only validate the token/account and exit")
     pub.set_defaults(func=cmd_publish)
+
+    fo = sub.add_parser("fonts", help="the caption font library")
+    fo.add_argument("action", nargs="?", default="list",
+                    choices=["list", "catalog", "install", "choose"])
+    fo.add_argument("--dir", default="data/fonts")
+    fo.add_argument("--keys", help="install: comma-separated catalog keys")
+    fo.add_argument("--force", action="store_true", help="install: re-download")
+    fo.add_argument("--archetype", default="", help="choose: Discover archetype")
+    fo.add_argument("--slot", default="", help="choose: hook | body | payoff")
+    fo.add_argument("--description", default="",
+                    help="choose: the measured caption description")
+    fo.set_defaults(func=cmd_fonts)
     return p
 
 

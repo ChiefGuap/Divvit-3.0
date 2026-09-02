@@ -140,7 +140,7 @@ def _ass_escape(text: str) -> str:
 
 
 def build_ass(cues: list[Cue], width: int, height: int,
-              fontsize: int = 64, color: str = "white",
+              fontsize: int = 64, color: str = "white", font_family: str = "",
               outline_color: str = "black", y_fraction: float = 0.78,
               highlight_color: str = "yellow",
               karaoke: bool = True) -> str:
@@ -164,7 +164,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Divvit,Arial,{fontsize},{primary},{highlight},{outline},&H64000000,-1,0,0,0,100,100,0,0,1,{max(3, fontsize // 16)},1,2,60,60,{margin_v},1
+Style: Divvit,{font_family or "Arial"},{fontsize},{primary},{highlight},{outline},&H64000000,-1,0,0,0,100,100,0,0,1,{max(3, fontsize // 16)},1,2,60,60,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text

@@ -138,6 +138,26 @@ def plan_edit(recipe: Recipe, library: ClipLibrary, finder: MomentFinder,
 
 # ------------------------------------------------------------------ render
 
+def _fontfile_arg(caption: Any) -> str:
+    """`fontfile=` for drawtext, or "" when no font was chosen.
+
+    Empty means ffmpeg falls back to its own default — which is what happened
+    on every render before the font library existed, and which renders
+    differently on the render host than on a laptop. Better to be explicit
+    about the fallback than to silently ship it.
+
+    The path is escaped for the filter-graph parser, where a colon separates
+    options and a quote ends the string. macOS paths carry neither, but the
+    variable fonts on disk are named like `Montserrat[wght].ttf` and those
+    brackets must survive intact.
+    """
+    path = getattr(caption, "font_file", None)
+    if not path:
+        return ""
+    escaped = str(path).replace("\\", "/").replace(":", r"\\:").replace("'", r"\\'")
+    return f"fontfile='{escaped}':"
+
+
 def _escape_drawtext(text: str) -> str:
     return (text.replace("\\", "\\\\").replace(":", "\\:")
             .replace("'", "\\\\\\'").replace("%", "\\%"))
@@ -200,8 +220,9 @@ def _segment_filters(overlay: Optional[str], caption=None) -> str:
         bc = getattr(caption, "border_color", "black@0.7")
         y = getattr(caption, "y_fraction", 0.78)
         chain += (
-            f",drawtext=text='{text}':fontcolor={color}:fontsize={size}:"
-            f"borderw={bw}:bordercolor={bc}:x=(w-text_w)/2:y=h*{y}"
+            f",drawtext={_fontfile_arg(caption)}text='{text}':fontcolor={color}:"
+            f"fontsize={size}:borderw={bw}:bordercolor={bc}:"
+            f"x=(w-text_w)/2:y=h*{y}"
         )
     return chain
 
@@ -243,6 +264,11 @@ def _render_segment(seg: PlannedSegment, index: int, workdir: Path,
                     fontsize=max(58, int(getattr(caption, "fontsize", 64) * 1.05)),
                     color=getattr(caption, "color", "white"),
                     outline_color=getattr(caption, "border_color", "black"),
+                    # libass resolves by family name, not by path, so the
+                    # family has to match a font fontconfig can actually see.
+                    # Without this the style asked for Arial, which we have no
+                    # licence to ship and which is absent on most render hosts.
+                    font_family=getattr(caption, "font_family", "") or "",
                     y_fraction=getattr(caption, "y_fraction", 0.78))
                 seg.spoken_caption = " ".join(c.text() for c in cues)[:300]
         except Exception as exc:

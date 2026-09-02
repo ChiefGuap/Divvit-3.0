@@ -52,6 +52,13 @@ class CaptionStyle:
     border_color: str = "black@0.7"
     y_fraction: float = 0.78   # 0 = top, 1 = bottom
     source: str = "default"
+    # Absolute path to the .ttf ffmpeg should draw with, and the family name
+    # ASS needs. None means "no font was chosen" — the renderer then falls
+    # back to ffmpeg's default rather than guessing, and says so.
+    font_file: Optional[str] = None
+    font_family: Optional[str] = None
+    font_key: Optional[str] = None
+    font_source: str = "none"   # automatic | manual | none
 
     @classmethod
     def from_description(cls, description: str) -> "CaptionStyle":
