@@ -302,3 +302,82 @@ def compare(a: VideoFingerprint, b: VideoFingerprint) -> FingerprintMatch:
     else:
         verdict = "distinct"
     return FingerprintMatch(distance=distance, verdict=verdict)
+
+
+# ------------------------------------------------------- cover-frame match
+
+@dataclass
+class CoverMatch:
+    """Does a platform's cover image appear in the video we screened?"""
+
+    matched: bool
+    distance: int                  # best Hamming distance over all frames
+    best_frame: int                # which sampled frame matched
+    frames_compared: int
+    threshold: int
+    similarity: float              # 1.0 - distance/64, the spec's 0-0.85 scale
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+# Calibrated 2026-09-01 against real TikTok covers fetched from oEmbed and
+# matched to the same creator's videos held locally:
+#
+#     cover 6747282088778632454 vs its own video     2 bits   (sim 0.969)
+#     cover 6745113350746737926 vs its own video     1 bit    (sim 0.984)
+#     cover 6747282088778632454 vs the other video  24 bits   (sim 0.625)
+#     cover 6745113350746737926 vs the other video  23 bits   (sim 0.641)
+#
+# A 21-bit gap, and the genuine side is far tighter than expected — a platform
+# cover really is one of the frames, re-encoded but not re-composed. 12 sits in
+# the middle of that gap. The spec's 0.85 similarity works out at ~10 bits,
+# so this is the same call arrived at from measurement rather than assumption.
+#
+# An earlier guess of 18 would have "worked" on this data while sitting only
+# 5 bits from an impostor — comfortable until the first near-duplicate.
+COVER_MATCH_BITS = 12
+
+
+def hash_image(path: Path | str) -> int:
+    """dHash one still, on the same grid and with the same scaler the video
+    frames use — a cover hashed differently from the frames it is compared
+    against would be comparing two different measurements.
+
+    It cannot reuse `_extract_gray_frames`: that applies an `fps` filter, and a
+    still image has no timeline for fps to sample, so ffmpeg emits nothing.
+    """
+    path = Path(path)
+    proc = subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(path),
+         "-vf", f"scale={_HASH_W}:{_HASH_H}:flags=area,format=gray",
+         "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "gray", "-"],
+        capture_output=True, timeout=120)
+    raw = proc.stdout
+    if len(raw) < _FRAME_BYTES:
+        raise FingerprintError(
+            f"ffmpeg produced no frame for {path.name}: "
+            f"{proc.stderr.decode(errors='replace').strip()[:200]}")
+    frame = np.frombuffer(raw[:_FRAME_BYTES], dtype=np.uint8).reshape(_HASH_H, _HASH_W)
+    return _dhash(frame)
+
+
+def cover_match(fingerprint: VideoFingerprint, cover_path: Path | str,
+                threshold: int = COVER_MATCH_BITS) -> CoverMatch:
+    """Compare a posted cover frame against every frame we sampled at screening.
+
+    The cover is whichever frame the platform (or the poster) chose, so it is
+    matched against the *minimum* distance across the whole video rather than
+    against frame zero. Matching only the first frame would fail every video
+    whose creator picked a later thumbnail — which is most of them.
+    """
+    cover = hash_image(cover_path)
+    best, best_i = HASH_BITS, -1
+    for i, frame in enumerate(fingerprint.frame_hashes):
+        d = _hamming(cover, frame)
+        if d < best:
+            best, best_i = d, i
+    return CoverMatch(
+        matched=best <= threshold, distance=best, best_frame=best_i,
+        frames_compared=fingerprint.n_frames, threshold=threshold,
+        similarity=round(1.0 - best / HASH_BITS, 4))
