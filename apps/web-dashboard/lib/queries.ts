@@ -378,3 +378,57 @@ export async function recentVideos(limit = 24): Promise<VideoRow[]> {
   if (error) throw new Error(`recentVideos: ${error.message}`);
   return data ?? [];
 }
+
+/** Videos for the Discover feed, newest first, with the venue they are about. */
+export type FeedVideo = VideoRow & {
+  thumbnail_url: string | null;
+  duration_seconds: number | null;
+  business_name: string | null;
+  business_city: string | null;
+};
+
+export async function discoverFeed(limit = 60): Promise<FeedVideo[]> {
+  const supabase = await db();
+  const { data, error } = await supabase
+    .from("discovered_videos")
+    .select("id, business_id, canonical_id, platform, url, title, view_count, like_count, comment_count, published_at, creator_handle, creator_display_name, thumbnail_url, duration_seconds, businesses(name, city)")
+    .order("published_at", { ascending: false, nullsFirst: false })
+    .limit(limit);
+
+  if (error) throw new Error(`discoverFeed: ${error.message}`);
+
+  type Row = Omit<FeedVideo, "business_name" | "business_city"> & {
+    businesses?: { name: string | null; city: string | null } | null;
+  };
+
+  return ((data ?? []) as unknown as Row[]).map(({ businesses, ...v }) => ({
+    ...v,
+    business_name: businesses?.name ?? null,
+    business_city: businesses?.city ?? null,
+  }));
+}
+
+/**
+ * How the discovered corpus splits by platform, counted from rows.
+ *
+ * Returned as counts rather than percentages: a share computed here would
+ * hide how small some of these are, and "2 of 387" is a different claim from
+ * "0.5%".
+ */
+export async function platformMix(): Promise<{ platform: string; count: number }[]> {
+  const supabase = await db();
+  const { data, error } = await supabase
+    .from("discovered_videos")
+    .select("platform")
+    .limit(5000);
+
+  if (error) throw new Error(`platformMix: ${error.message}`);
+  const tally = new Map<string, number>();
+  for (const row of (data ?? []) as { platform: string | null }[]) {
+    const key = row.platform ?? "unknown";
+    tally.set(key, (tally.get(key) ?? 0) + 1);
+  }
+  return [...tally.entries()]
+    .map(([platform, count]) => ({ platform, count }))
+    .sort((a, b) => b.count - a.count);
+}
