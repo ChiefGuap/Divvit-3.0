@@ -1,13 +1,20 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Shell } from "@/components/Shell";
+import { activityEvents } from "@/lib/queries";
 
 export const metadata: Metadata = {
   title: "Divvit — Restaurant Dashboard",
   description: "Customer-generated video for restaurants.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+// The layout fetches the activity strip so every page shares one read rather
+// than each fetching its own.
+export const dynamic = "force-dynamic";
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const events = await activityEvents();
+
   return (
     <html lang="en">
       <head>
@@ -19,7 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
-        <Shell>{children}</Shell>
+        <Shell events={events}>{children}</Shell>
       </body>
     </html>
   );

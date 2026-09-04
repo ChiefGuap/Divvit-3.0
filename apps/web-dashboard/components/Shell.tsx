@@ -9,7 +9,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { Icon, type IconName } from "@/lib/icons";
-import { RESTAURANT, feedPool, searchPhrases, searchCorpus } from "@/lib/data";
+import { RESTAURANT, searchPhrases, searchCorpus } from "@/lib/data";
+import type { ActivityEvent } from "@/lib/queries";
 import { EASE } from "@/lib/ui";
 
 /* Nav order and parent/child relationships from the handoff's Layout shell. */
@@ -39,7 +40,18 @@ const PAGE_META: Record<string, { label: string; icon: IconName; parent?: string
   "/rewards/creators": { label: "Creators", icon: "users", parent: "Rewards", parentIcon: "gift" },
 };
 
-export type FeedEvent = (typeof feedPool)[number] & { key: number; at: number; fresh?: boolean };
+/* One entry in the live activity strip.
+   Derived from a real `activity_events` row — never synthesised. */
+export type FeedEvent = {
+  key: string;
+  who: string;
+  what: string;
+  meta: string;
+  icon: IconName;
+  fg: string;
+  at: number;
+  fresh?: boolean;
+};
 
 type ShellState = {
   toast: (verb: string, name: string) => void;
@@ -54,7 +66,17 @@ export const useShell = () => {
   return ctx;
 };
 
-export function Shell({ children }: { children: React.ReactNode }) {
+/* Kind -> how the row is drawn. Unknown kinds fall back rather than being
+   dropped, so a new event type shows up as soon as something writes one. */
+const EVENT_ICON: Record<string, { icon: IconName; fg: string }> = {
+  submission: { icon: "clapper", fg: "#8c52ff" },
+  redemption: { icon: "gift", fg: "#f59512" },
+  campaign: { icon: "megaphone", fg: "#6346cd" },
+  discovery: { icon: "radar", fg: "#16a06b" },
+};
+
+export function Shell({ children, events = [] }:
+  { children: React.ReactNode; events?: ActivityEvent[] }) {
   const pathname = usePathname() || "/";
   const router = useRouter();
 
@@ -64,7 +86,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [helpOpen, setHelpOpen] = React.useState(false);
   const [toast, setToast] = React.useState<{ verb: string; name: string; key: number } | null>(null);
   const [feed, setFeed] = React.useState<FeedEvent[]>([]);
-  const [liveVideos, setLiveVideos] = React.useState(7);
+  const [liveVideos, setLiveVideos] = React.useState(0);
   const [now, setNow] = React.useState(() => Date.now());
 
   const [query, setQuery] = React.useState("");
@@ -83,22 +105,27 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   const shut = collapsed && !hovering;
 
-  /* Live Feed — seeded, then self-ticks. Real app: WS/SSE on new submissions. */
+  /* Live feed — real events only.
+     This used to seed from a fixture and then invent a new entry every 5.2
+     seconds: people sending clips and redeeming rewards that never happened.
+     A fabricated feed that ticks is read as a working system, which is worse
+     than an obviously static placeholder. It now renders `activity_events`,
+     which is empty, so the strip shows its empty state instead of animating.
+     The clock still runs, because relative timestamps on real rows need it. */
   React.useEffect(() => {
-    const t0 = Date.now();
-    setFeed(feedPool.slice(0, 4).map((e, i) => ({ ...e, key: -i, at: t0 - (i * 4 + 2) * 60000 })));
-    let idx = 4;
-    const feedTimer = setInterval(() => {
-      if (document.hidden) return;
-      const e = feedPool[idx % feedPool.length];
-      idx += 1;
-      setFeed((prev) => [{ ...e, key: idx, at: Date.now(), fresh: true },
-        ...prev.map((f) => ({ ...f, fresh: false }))].slice(0, 5));
-      if (e.clip) setLiveVideos((n) => n + 1);
-    }, 5200);
+    setFeed(events.map((e) => ({
+      key: e.id,
+      who: e.actor_name ?? "Someone",
+      what: e.headline ?? e.kind ?? "did something",
+      meta: e.detail ?? "",
+      icon: (EVENT_ICON[e.kind ?? ""] ?? { icon: "pulse" as IconName }).icon,
+      fg: (EVENT_ICON[e.kind ?? ""] ?? { fg: "#8c52ff" }).fg,
+      at: e.occurred_at ? new Date(e.occurred_at).getTime() : Date.now(),
+    })));
+    setLiveVideos(events.filter((e) => e.kind === "submission").length);
     const clock = setInterval(() => setNow(Date.now()), 1000);
-    return () => { clearInterval(feedTimer); clearInterval(clock); };
-  }, []);
+    return () => clearInterval(clock);
+  }, [events]);
 
   /* Header placeholder types and deletes through five phrases. Pure UI —
      skips when the tab is hidden or the field is focused/dirty. */

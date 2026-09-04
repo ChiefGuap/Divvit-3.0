@@ -432,3 +432,183 @@ export async function platformMix(): Promise<{ platform: string; count: number }
     .map(([platform, count]) => ({ platform, count }))
     .sort((a, b) => b.count - a.count);
 }
+
+/* ------------------------------------------------- tables nothing writes yet
+
+   Each of these has a schema and zero rows. They are queried rather than
+   stubbed so the page proves the read path works: when something finally
+   writes a row, it appears without a code change. `count` is what the UI
+   needs to tell "not built" apart from "filtered to nothing". */
+
+export type TableState = { rows: number };
+
+async function countOf(table: string): Promise<number> {
+  const supabase = await db();
+  const { count, error } = await supabase
+    .from(table)
+    .select("id", { count: "exact", head: true });
+  // A missing table is a real error worth surfacing; an empty one is not.
+  if (error) throw new Error(`${table}: ${error.message}`);
+  return count ?? 0;
+}
+
+export type SubmissionRow = {
+  id: string;
+  business_id: string | null;
+  user_id: string | null;
+  campaign_id: string | null;
+  video_url: string | null;
+  source: string | null;
+  status: string | null;
+  category: string | null;
+  created_at: string | null;
+};
+
+export async function submissions(limit = 50): Promise<SubmissionRow[]> {
+  const supabase = await db();
+  const { data, error } = await supabase
+    .from("submissions")
+    .select("id, business_id, user_id, campaign_id, video_url, source, status, category, created_at")
+    .order("created_at", { ascending: false, nullsFirst: false })
+    .limit(limit);
+  if (error) throw new Error(`submissions: ${error.message}`);
+  return (data ?? []) as SubmissionRow[];
+}
+
+export type CampaignRow = {
+  id: string;
+  business_id: string | null;
+  title: string | null;
+  instructions: string | null;
+  is_active: boolean | null;
+  created_at: string | null;
+};
+
+export async function campaigns(limit = 50): Promise<CampaignRow[]> {
+  const supabase = await db();
+  const { data, error } = await supabase
+    .from("campaigns")
+    .select("id, business_id, title, instructions, is_active, created_at")
+    .order("created_at", { ascending: false, nullsFirst: false })
+    .limit(limit);
+  if (error) throw new Error(`campaigns: ${error.message}`);
+  return (data ?? []) as CampaignRow[];
+}
+
+export type ContentItemRow = {
+  id: string;
+  business_id: string | null;
+  title: string | null;
+  creator_label: string | null;
+  state: string | null;
+  poster_url: string | null;
+  video_url: string | null;
+  source_platform: string | null;
+  duration_seconds: number | null;
+  view_count: number | null;
+  like_count: number | null;
+  times_used: number | null;
+  created_at: string | null;
+};
+
+export async function contentItems(limit = 50): Promise<ContentItemRow[]> {
+  const supabase = await db();
+  const { data, error } = await supabase
+    .from("content_items")
+    .select("id, business_id, title, creator_label, state, poster_url, video_url, source_platform, duration_seconds, view_count, like_count, times_used, created_at")
+    .order("created_at", { ascending: false, nullsFirst: false })
+    .limit(limit);
+  if (error) throw new Error(`contentItems: ${error.message}`);
+  return (data ?? []) as ContentItemRow[];
+}
+
+/** One round trip per table, run together. Used by pages that need to say
+ *  which of several things is missing rather than a single blank screen. */
+export async function tableCounts() {
+  const [subs, camps, rewards, redemptions, content, cuts, events] =
+    await Promise.all([
+      countOf("submissions"), countOf("campaigns"), countOf("rewards"),
+      countOf("reward_redemptions"), countOf("content_items"),
+      countOf("editor_cuts"), countOf("activity_events"),
+    ]);
+  return { submissions: subs, campaigns: camps, rewards, redemptions,
+           contentItems: content, editorCuts: cuts, activityEvents: events };
+}
+
+export type RewardRow = {
+  id: string;
+  business_id: string | null;
+  title: string | null;
+  reward_type: string | null;
+  description: string | null;
+  created_at: string | null;
+};
+
+export async function rewards(limit = 50): Promise<RewardRow[]> {
+  const supabase = await db();
+  const { data, error } = await supabase
+    .from("rewards")
+    .select("id, business_id, title, reward_type, description, created_at")
+    .order("created_at", { ascending: false, nullsFirst: false })
+    .limit(limit);
+  if (error) throw new Error(`rewards: ${error.message}`);
+  return (data ?? []) as RewardRow[];
+}
+
+export type EditorCutRow = {
+  id: string;
+  business_id: string | null;
+  title: string | null;
+  state: string | null;
+  clip_count: number | null;
+  duration_seconds: number | null;
+  poster_url: string | null;
+  video_url: string | null;
+  view_count: number | null;
+  created_at: string | null;
+};
+
+export async function editorCuts(limit = 50): Promise<EditorCutRow[]> {
+  const supabase = await db();
+  const { data, error } = await supabase
+    .from("editor_cuts")
+    .select("id, business_id, title, state, clip_count, duration_seconds, poster_url, video_url, view_count, created_at")
+    .order("created_at", { ascending: false, nullsFirst: false })
+    .limit(limit);
+  if (error) throw new Error(`editorCuts: ${error.message}`);
+  return (data ?? []) as EditorCutRow[];
+}
+
+export type ActivityEvent = {
+  id: string;
+  business_id: string | null;
+  kind: string | null;
+  actor_name: string | null;
+  headline: string | null;
+  detail: string | null;
+  occurred_at: string | null;
+};
+
+/**
+ * The live activity strip.
+ *
+ * Returns whatever the table holds, which today is nothing. The strip that
+ * this replaced invented people sending clips and redeeming rewards, ticking
+ * on a timer on every page — a fabricated feed that animates is read as a
+ * working system, which is a worse lie than a static placeholder.
+ */
+export async function activityEvents(limit = 12): Promise<ActivityEvent[]> {
+  const supabase = await db();
+  const { data, error } = await supabase
+    .from("activity_events")
+    .select("id, business_id, kind, actor_name, headline, detail, occurred_at")
+    .order("occurred_at", { ascending: false, nullsFirst: false })
+    .limit(limit);
+  if (error) throw new Error(`activityEvents: ${error.message}`);
+  return (data ?? []) as ActivityEvent[];
+}
+
+/** Total discovered videos. Split out so pages never build their own client. */
+export async function videoCount(): Promise<number> {
+  return countOf("discovered_videos");
+}

@@ -4,24 +4,12 @@
    must come from the database. Keeping the fetch here means no creator figure
    is ever computed from a fixture. */
 
-import { creatorLeaderboard } from "@/lib/queries";
-import { createClient } from "@/utils/supabase/server";
-import { cookies } from "next/headers";
+import { creatorLeaderboard, videoCount } from "@/lib/queries";
 import CreatorsView from "./CreatorsView";
 
 export const dynamic = "force-dynamic";
 
 export default async function CreatorsPage() {
-  const [creators, videoTotal] = await Promise.all([
-    creatorLeaderboard(),
-    (async () => {
-      const supabase = createClient(await cookies());
-      const { count } = await supabase
-        .from("discovered_videos")
-        .select("id", { count: "exact", head: true });
-      return count ?? 0;
-    })(),
-  ]);
-
-  return <CreatorsView creators={creators} videoTotal={videoTotal} />;
+  const [creators, videos] = await Promise.all([creatorLeaderboard(), videoCount()]);
+  return <CreatorsView creators={creators} videoTotal={videos} />;
 }
