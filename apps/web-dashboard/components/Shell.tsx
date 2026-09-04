@@ -29,6 +29,8 @@ const PAGE_META: Record<string, { label: string; icon: IconName; parent?: string
   "/": { label: "Dashboard", icon: "grid" },
   "/collection": { label: "The Collection", icon: "clapper" },
   "/collection/campaigns": { label: "Campaigns", icon: "megaphone", parent: "The Collection", parentIcon: "clapper" },
+  "/collection/submit": { label: "Submit a video", icon: "upload", parent: "The Collection", parentIcon: "clapper" },
+  "/collection/claim": { label: "Claim a reward", icon: "shield", parent: "The Collection", parentIcon: "clapper" },
   "/content": { label: "Content Manager", icon: "folder" },
   "/discover": { label: "Discover", icon: "radar" },
   "/discover/brand-health": { label: "Organic brand health", icon: "pulse", parent: "Discover", parentIcon: "radar" },

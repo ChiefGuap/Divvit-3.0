@@ -110,6 +110,38 @@ No network. Covers outage-vs-rejection, tier routing, short-circuit ordering
 (a private post costs one HTTP call, not five), and that no gate name or score
 leaks into diner-facing copy.
 
+## On the frontend
+
+`/collection/claim` runs the whole engine from the browser: paste a link, the
+five checks resolve, and the post renders beside them with its cover frame,
+caption and decoded timestamp.
+
+The page has two views. **Diner** shows five plain-language steps — *Finding
+your post, Matching your account, Checking the timing, Confirming your video,
+Reviewing your video* — and one sentence naming the fix. No gate names, no
+scores. **Staff** adds the engine's own reason per gate, the verdict, which
+links soft-passed, and the claim id.
+
+`POST /api/verify` spawns the CLI with an argument array and no shell. A
+pasted URL is attacker-controlled by definition, so it goes into argv, never
+a command line.
+
+## Claims, dedupe and the T+7 re-check
+
+`claims.db` records one row per post, behind a unique index on
+`(platform, post_id)` — a double payout is impossible even if two requests
+arrive together. The dedupe check runs *before* the gates: a link already paid
+out costs nothing to detect, and running five gates on it, one of which
+downloads a file, would be paying to re-answer a settled question. The
+duplicate response carries the original post metadata from the stored row, so
+the diner can see which post it was without a second fetch.
+
+Only **paid** verdicts schedule a re-check — there is nothing to claw back
+from a claim that never paid. At T+7 only gate 1 re-runs: the other four
+judged facts that cannot change, and liveness is the thing being attacked. An
+unreachable platform **defers**, leaving the claim due; our downtime is not
+their fraud, at re-check time just as at claim time.
+
 ## Not built
 
 - Instagram anything. Its pasted link cannot satisfy the window rule, so it is

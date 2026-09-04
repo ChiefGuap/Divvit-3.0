@@ -40,6 +40,10 @@ APPROVE, APPROVE_SOFT, HOLD, REJECT, RETRY_LATER = (
 
 CLAIM_WINDOW = timedelta(hours=24)
 
+# Approved claims are re-examined a week later. Without this we pay for posts
+# that live ninety seconds, which is the cheapest attack in the whole system.
+RECHECK_AFTER_DAYS = 7
+
 # Tier -> whether a soft pass may be paid instantly, and how much the screening
 # pass mark moves. Straight from the spec's cost table: being wrong on a coffee
 # costs a dollar; being wrong on an entrée costs twenty.
