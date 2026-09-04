@@ -258,6 +258,34 @@ def cmd_harvest(args) -> int:
     return 0
 
 
+def cmd_places_sweep(args) -> int:
+    """OSM had well under half the county: measured against Google Places over
+    five cities, 158 of 200 results had no roster match, and a 20-row sample
+    of those showed 5 were name-matching failures rather than genuine
+    absences — so the real gap is around 60%."""
+    from services.venues.places_roster import OC_CITIES, sweep
+    cities = args.cities or list(OC_CITIES)
+    result = sweep(cities, args.db, on_status=lambda m: print(m, file=sys.stderr,
+                                                              flush=True),
+                   dry_run=args.dry_run)
+    print(json.dumps(result.to_dict(), indent=2))
+    return 0
+
+
+def cmd_profiles(args) -> int:
+    from services.venues.profile import profiles
+    rows = profiles(args.db, limit=args.limit)
+    payload = json.dumps(rows, indent=2)
+    if args.out:
+        Path(args.out).write_text(payload)
+        ready = sum(1 for r in rows if r["readiness"]["ready_to_show"])
+        print(f"{len(rows)} profiles -> {args.out} ({ready} ready to show)",
+              file=sys.stderr)
+    else:
+        print(payload)
+    return 0
+
+
 def cmd_backfill_cities(args) -> int:
     """294 of 686 cafes arrived from Overpass with no city, and almost none
     carry a street or postcode to derive one from. Reverse geocoding was
@@ -381,6 +409,22 @@ def build_parser() -> argparse.ArgumentParser:
                    help="stop after N (use a small number to check cost first)")
     p.add_argument("--db", default="data/venues.db")
     p.set_defaults(func=cmd_backfill_cities)
+
+    p = sub.add_parser("places-sweep",
+                       help="complete the roster from Google Places")
+    p.add_argument("--cities", nargs="*",
+                   help="default: every Orange County city")
+    p.add_argument("--dry-run", action="store_true",
+                   help="report what would be added without writing or billing writes")
+    p.add_argument("--db", default="data/venues.db")
+    p.set_defaults(func=cmd_places_sweep)
+
+    p = sub.add_parser("profiles",
+                       help="prefilled onboarding profiles, one per cafe")
+    p.add_argument("--out", help="write JSON here instead of stdout")
+    p.add_argument("--limit", type=int)
+    p.add_argument("--db", default="data/venues.db")
+    p.set_defaults(func=cmd_profiles)
 
     p = sub.add_parser("metrics", help="collect public signal for pending cafes")
     common(p)
