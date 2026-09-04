@@ -219,6 +219,11 @@ def process_claim(url: str, submitter_id: str, handle_on_file: str,
         link = resolve_link(url)
     except LinkError as exc:
         return {"verdict": "reject", "tier": tier, "gates": [],
+                "post": None, "soft_passes": [], "submission_id": None,
+                "screened": False,
+                "ownership_proof": {"connected": False,
+                                    "reason": "not evaluated — the link did not resolve"},
+                "claim_id": None,
                 "user_message": "That link doesn't look like a TikTok or Instagram post.",
                 "error": str(exc)}
 
@@ -239,10 +244,19 @@ def process_claim(url: str, submitter_id: str, handle_on_file: str,
             prior_post = json.loads(prior["post"] or "null")
         except (TypeError, ValueError):
             prior_post = None
+        # Same keys as the gate path. A client must never have to branch on
+        # which branch produced the response, so every field the normal path
+        # returns is present here too.
         return {"verdict": "reject", "tier": tier,
                 "gates": [g.to_dict() for g in gates],
                 "post": prior_post, "soft_passes": [],
                 "user_message": "You've already claimed this post.",
+                "submission_id": prior["submission_id"],
+                "screened": bool(prior["submission_id"]),
+                "ownership_proof": {"connected": False,
+                                    "reason": "not evaluated — this post was "
+                                              "already claimed"},
+                "claim_id": prior["claim_id"],
                 "duplicate_of": prior["claim_id"],
                 "claimed_at": prior["created_at"]}
 

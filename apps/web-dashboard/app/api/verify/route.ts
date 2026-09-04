@@ -1,28 +1,24 @@
 /**
- * Claim verification — the five gates, driven from the browser.
+ * Thin proxy to the engine service.
  *
- * Same subprocess boundary as /api/intake and for the same reason: the gates
- * are Python (fingerprint comparison, ffmpeg, the snowflake decode), and a
- * second implementation in Node would be two copies of a fraud check drifting
- * apart. The CLI prints JSON on stdout, so it is a clean seam.
+ * This route used to spawn a Python subprocess, which only worked because the
+ * dashboard and the engine share a machine. The app cannot do that, so the
+ * engine now lives behind an HTTP contract and BOTH front ends are clients of
+ * it — same endpoint, same JSON, same verdicts, one implementation.
  *
- * Spawned with an argument array and no shell — a pasted URL is attacker
- * controlled by definition, and it goes straight into argv, never a command
- * line.
+ * What stays here is the dashboard's own concern: turning a browser session
+ * into a bearer token. The browser never sees the engine token, and identity
+ * still comes from the token rather than the request body.
  */
-import { spawn } from "node:child_process";
-import path from "node:path";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-const REPO_ROOT = path.resolve(process.cwd(), "..", "..");
-const PYTHON = path.join(REPO_ROOT, ".venv", "bin", "python");
-
-const TIERS = new Set([1, 2, 3, 4]);
-// A pasted link is untrusted input. Length-cap it before it reaches argv.
-const MAX_URL = 2048;
+const ENGINE = process.env.DIVVIT_ENGINE_URL ?? "http://127.0.0.1:8787";
+// Stands in for the signed-in creator's session until real auth exists. The
+// dashboard is a trusted server-side caller; the browser never holds this.
+const ENGINE_TOKEN = process.env.DIVVIT_ENGINE_TOKEN ?? "devtok";
 
 export async function POST(request: Request) {
   let body: Record<string, unknown>;
@@ -32,69 +28,43 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "expected a JSON body" }, { status: 400 });
   }
 
-  const url = String(body.url ?? "").trim();
-  const submitter = String(body.submitter ?? "").trim();
-  const handle = String(body.handle ?? "").trim().replace(/^@/, "");
-  const tier = Number(body.tier ?? 1);
-  // `connected` is deliberately NOT read from the body. Ownership proof is
-  // looked up server-side from the linked-accounts store; a request that could
-  // assert it would be able to upgrade its own ownership gate from a soft pass
-  // to a hard pass, defeating the tier rule that holds expensive rewards.
+  const payload = {
+    url: String(body.url ?? "").trim(),
+    handle: String(body.handle ?? "").trim().replace(/^@/, ""),
+    tier: Number(body.tier ?? 1),
+    submission_id: body.submission_id ?? null,
+  };
 
-  if (!url) return NextResponse.json({ error: "paste a link first" }, { status: 400 });
-  if (url.length > MAX_URL)
-    return NextResponse.json({ error: "that link is too long" }, { status: 400 });
-  if (!submitter || !handle)
-    return NextResponse.json(
-      { error: "submitter and handle are both required — ownership is checked "
-             + "against the handle on file" },
-      { status: 400 },
-    );
-  if (!TIERS.has(tier))
-    return NextResponse.json({ error: "tier must be 1-4" }, { status: 400 });
-
-  const args = [
-    "-m", "services.verify.cli", "claim", url,
-    "--submitter", submitter,
-    "--handle", handle,
-    "--tier", String(tier),
-  ];
+  if (!payload.url) return NextResponse.json({ error: "paste a link first" }, { status: 400 });
+  if (!payload.handle)
+    return NextResponse.json({ error: "a handle is required — ownership is "
+                                     + "checked against the post's author" },
+                             { status: 400 });
 
   try {
-    const { payload, stderr, code } = await run(args);
-    if (payload) return NextResponse.json(payload);
-    return NextResponse.json(
-      { error: "verification did not return a result",
-        detail: stderr.slice(-1200), code },
-      { status: 502 },
-    );
+    const res = await fetch(`${ENGINE}/v1/claims`, {
+      method: "POST",
+      headers: { "content-type": "application/json",
+                 authorization: `Bearer ${ENGINE_TOKEN}` },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(115_000),
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      return NextResponse.json(
+        { error: json?.detail ?? `engine returned ${res.status}` },
+        { status: res.status },
+      );
+    }
+    return NextResponse.json(json);
   } catch (err) {
+    // A dead engine is an outage, not a rejected claim — the same rule the
+    // gates follow. Never let this surface as "your claim failed".
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "verification failed" },
-      { status: 500 },
+      { error: "the verification engine is unreachable",
+        detail: err instanceof Error ? err.message : String(err),
+        hint: "start it with: .venv/bin/uvicorn services.api.app:app --port 8787" },
+      { status: 503 },
     );
   }
-}
-
-function run(args: string[]): Promise<{
-  payload: Record<string, unknown> | null; stderr: string; code: number | null;
-}> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(PYTHON, args, { cwd: REPO_ROOT, shell: false,
-                                        env: { ...process.env, PYTHONUNBUFFERED: "1" } });
-    let out = "", err = "";
-    child.stdout.on("data", (d) => { out += d.toString(); });
-    child.stderr.on("data", (d) => { err += d.toString(); });
-    const timer = setTimeout(() => { child.kill("SIGKILL");
-                                     reject(new Error("verification timed out")); }, 110_000);
-    child.on("error", (e) => { clearTimeout(timer); reject(e); });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      // A rejected claim exits 1 but still carries a full result, so parse
-      // before judging on the exit code.
-      let payload: Record<string, unknown> | null = null;
-      try { payload = JSON.parse(out.trim()); } catch { payload = null; }
-      resolve({ payload, stderr: err, code });
-    });
-  });
 }
