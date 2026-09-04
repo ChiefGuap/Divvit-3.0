@@ -206,14 +206,26 @@ export async function videosForVenue(businessId: string, limit = 24): Promise<Vi
 /** Corpus-wide counts, used to say plainly how much of the roster is measured. */
 export async function coverage() {
   const supabase = await db();
-  const [venues, ranked, videos] = await Promise.all([
+  const [venues, rankable, videos] = await Promise.all([
     supabase.from("businesses").select("id", { count: "exact", head: true }).eq("lifecycle_status", "active"),
-    supabase.from("brand_health_snapshots").select("id", { count: "exact", head: true }).eq("rankable", true),
+    // Snapshots are a history: one venue accumulates many rows over time, so
+    // counting them answers "how many rankable measurements exist", not "how
+    // many venues are rankable". Counting the rows reported 435 rankable
+    // against 265 active venues — a figure that cannot be true and read as
+    // one on the page. Distinct business_id is the number actually meant.
+    supabase.from("brand_health_snapshots").select("business_id").eq("rankable", true).limit(5000),
     supabase.from("discovered_videos").select("id", { count: "exact", head: true }),
   ]);
+
+  const distinct = new Set(
+    ((rankable.data ?? []) as { business_id: string | null }[])
+      .map((r) => r.business_id)
+      .filter(Boolean),
+  );
+
   return {
     activeVenues: venues.count ?? 0,
-    rankedVenues: ranked.count ?? 0,
+    rankedVenues: distinct.size,
     videos: videos.count ?? 0,
   };
 }
