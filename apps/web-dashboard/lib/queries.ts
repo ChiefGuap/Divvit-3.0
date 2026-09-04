@@ -245,16 +245,10 @@ function shape(row: Record<string, unknown>): RankedVenue {
 }
 
 /** Formats a possibly-absent number without ever inventing a value. */
-export function orDash(n: number | null | undefined, digits = 0): string {
-  return n === null || n === undefined ? "—" : n.toFixed(digits);
-}
-
-export function compactCount(n: number | null | undefined): string {
-  if (n === null || n === undefined) return "—";
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return String(n);
-}
+// Formatting moved to lib/format.ts so client components can use it without
+// pulling `next/headers` into the browser bundle. Re-exported here so existing
+// server-side imports keep working.
+export { orDash, compactCount } from "./format";
 
 export type SnapshotPoint = { captured_at: string; score: number | null; confidence: string; coverage: number | null };
 
@@ -276,5 +270,111 @@ export async function snapshotHistory(businessId: string, limit = 24): Promise<S
     .limit(limit);
 
   if (error) throw new Error(`snapshotHistory: ${error.message}`);
+  return data ?? [];
+}
+
+/* ------------------------------------------------------ creator leaderboard */
+
+export type LeaderboardCreator = {
+  id: string;
+  display_name: string | null;
+  handle: string | null;
+  platform: string | null;
+  follower_count: number | null;
+  /** Videos of this creator that we have actually discovered. */
+  video_count: number;
+  /**
+   * Summed views across those videos, or null when not one of them carries a
+   * view count. Absent is not zero: a creator whose videos we have never
+   * measured must not be shown level with one measured at zero views.
+   */
+  total_views: number | null;
+  /** Most recent publish date among their videos, ISO, or null. */
+  last_published_at: string | null;
+};
+
+/**
+ * Creators ranked by the reach we can actually attribute to them.
+ *
+ * Sorting is by measured views rather than follower count, because followers
+ * are what a creator claims and views are what their posts did. A creator
+ * with no measured views sorts last rather than at zero — the two are
+ * different facts, and the row renders "—" for the first.
+ *
+ * The videos are embedded in one request rather than fetched per creator: the
+ * aggregate is computed here because Supabase disables PostgREST's aggregate
+ * functions, and an N+1 over a leaderboard is worse than summing a few
+ * hundred rows in memory.
+ *
+ * `limit` defaults high enough to cover the whole corpus, because the count
+ * of returned rows is displayed as a total. A limit below the real number
+ * would silently turn "how many creators are there" into "how many did we
+ * ask for" — which is what it did at 200 against 313.
+ */
+export async function creatorLeaderboard(limit = 1000): Promise<LeaderboardCreator[]> {
+  const supabase = await db();
+  const { data, error } = await supabase
+    .from("creators")
+    .select("id, display_name, handle, platform, follower_count, discovered_videos(view_count, published_at)")
+    .limit(limit);
+
+  if (error) throw new Error(`creatorLeaderboard: ${error.message}`);
+
+  // supabase-js cannot infer an embedded relationship without generated
+  // database types, so the row shape is stated here rather than inferred.
+  type Embedded = { view_count: number | null; published_at: string | null };
+  type Row = {
+    id: string;
+    display_name: string | null;
+    handle: string | null;
+    platform: string | null;
+    follower_count: number | null;
+    discovered_videos?: Embedded[];
+  };
+
+  const rows: LeaderboardCreator[] = ((data ?? []) as unknown as Row[]).map((row) => {
+    const videos = row.discovered_videos ?? [];
+    const measured = videos.filter((v) => typeof v.view_count === "number");
+    const dates = videos.map((v) => v.published_at).filter(Boolean) as string[];
+
+    return {
+      id: row.id,
+      display_name: row.display_name,
+      handle: row.handle,
+      platform: row.platform,
+      follower_count: row.follower_count,
+      video_count: videos.length,
+      total_views: measured.length
+        ? measured.reduce((sum, v) => sum + (v.view_count ?? 0), 0)
+        : null,
+      last_published_at: dates.length ? dates.sort().at(-1)! : null,
+    };
+  });
+
+  // Creators we have discovered nothing for carry no signal at all; they are
+  // rows in the corpus, not people who posted about a venue.
+  return rows
+    .filter((r) => r.video_count > 0)
+    .sort((a, b) => {
+      if (a.total_views === b.total_views) return b.video_count - a.video_count;
+      if (a.total_views === null) return 1;
+      if (b.total_views === null) return -1;
+      return b.total_views - a.total_views;
+    });
+}
+
+/** Newest discovered videos across every venue, for the Discover feed. */
+export async function recentVideos(limit = 24): Promise<VideoRow[]> {
+  const supabase = await db();
+  const { data, error } = await supabase
+    .from("discovered_videos")
+    // One string literal, not a concatenation: supabase-js parses the select
+    // at the TYPE level, and "a" + "b" widens to `string`, which collapses the
+    // inferred row type to GenericStringError.
+    .select("id, business_id, canonical_id, platform, url, title, view_count, like_count, comment_count, published_at, creator_handle, creator_display_name")
+    .order("published_at", { ascending: false, nullsFirst: false })
+    .limit(limit);
+
+  if (error) throw new Error(`recentVideos: ${error.message}`);
   return data ?? [];
 }
