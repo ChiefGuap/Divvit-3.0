@@ -43,8 +43,8 @@ def store() -> ClaimStore:
 def result(verdict: str) -> ClaimResult:
     return ClaimResult(verdict=verdict, tier=2,
                        gates=[GateOutcome("resolve", PASS)],
-                       post={"handle": "diner", "video_id": "700"},
-                       soft_passes=["ownership"], diner_message="")
+                       post={"handle": "creator", "video_id": "700"},
+                       soft_passes=["ownership"], user_message="")
 
 
 def test_post_id_is_claimed_once() -> None:
@@ -52,13 +52,13 @@ def test_post_id_is_claimed_once() -> None:
     s = store()
     check(s.prior_claim("tiktok", "700") is None, "an unclaimed post has no prior claim")
 
-    s.record("clm_a", "tiktok", "700", "diner_1", "sub_1", 2, result(APPROVE_SOFT), now=NOW)
+    s.record("clm_a", "tiktok", "700", "creator_1", "sub_1", 2, result(APPROVE_SOFT), now=NOW)
     prior = s.prior_claim("tiktok", "700")
-    check(prior is not None and prior["submitter_id"] == "diner_1",
+    check(prior is not None and prior["submitter_id"] == "creator_1",
           "the claim is found afterwards, with the original submitter")
 
-    # A second diner claiming the same post must collide, not create a row.
-    s.record("clm_b", "tiktok", "700", "diner_2", "sub_2", 2, result(APPROVE_SOFT), now=NOW)
+    # A second creator claiming the same post must collide, not create a row.
+    s.record("clm_b", "tiktok", "700", "creator_2", "sub_2", 2, result(APPROVE_SOFT), now=NOW)
     check(len(s.claims()) == 1,
           "a second claim on the same post replaces rather than adds — the "
           "unique index makes a double payout impossible even under a race")
@@ -105,7 +105,7 @@ def test_recheck_claws_back_deleted_posts() -> None:
 
     def fake_fetch(link, **kw):
         return PostMetadata(platform="tiktok", video_id=link.video_id,
-                            handle="diner", live=live[link.video_id])
+                            handle="creator", live=live[link.video_id])
 
     L.fetch = fake_fetch
     try:

@@ -30,7 +30,7 @@ Linking proves *identity*. It does not unlock media:
   * **TikTok** — Login Kit works on ordinary personal accounts. Full win.
   * **YouTube** — Google sign-in, same shape.
   * **Instagram** — OAuth covers Business/Creator accounts only, which most
-    diners do not have, and even a linked account exposes posts and reels via
+    creators do not have, and even a linked account exposes posts and reels via
     `/me/media`, **never stories**. No API returns story content to a third
     party, linked or not.
 
@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS linked_accounts (
     linked_at        TEXT NOT NULL,
     revoked_at       TEXT
 );
--- One live link per (platform, handle): two diners cannot both own an account.
+-- One live link per (platform, handle): two creators cannot both own an account.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_link_handle
     ON linked_accounts(platform, handle) WHERE revoked_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_link_submitter ON linked_accounts(submitter_id);
@@ -188,7 +188,7 @@ class AccountStore:
             return False, "no linked account for that handle"
         if found.submitter_id != submitter_id:
             # Someone else already proved they own this handle.
-            return False, "that account is linked to a different diner"
+            return False, "that account is linked to a different creator"
         if not found.proven:
             return False, f"link exists but was recorded as '{found.method}', not confirmed by {platform}"
         return True, f"confirmed by {platform} at {found.linked_at[:10]}"

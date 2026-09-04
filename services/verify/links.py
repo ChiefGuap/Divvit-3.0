@@ -22,7 +22,7 @@ it is the only timestamp a keyless path can produce.
 
 Instagram is deliberately not implemented here. Its pasted link yields no
 timestamp and no caption, so it cannot satisfy the window rule at all; the
-answer for Instagram is the venue's connected account, not the diner's link.
+answer for Instagram is the venue's connected account, not the creator's link.
 Pretending otherwise would mean holding every Instagram claim for review and
 calling it verification.
 """
@@ -168,7 +168,7 @@ def fetch_tiktok(link: ResolvedLink,
     A 4xx here means the post is not publicly visible — deleted, private, or
     never existed. That is a *reject*, not an outage. A 5xx or a transport
     failure is an outage and must be raised so the caller can retry, because
-    rejecting a genuine claim over our own downtime loses the diner for good.
+    rejecting a genuine claim over our own downtime loses the creator for good.
     """
     fetch = fetch or _http_json
     query = urllib.parse.urlencode({"url": link.canonical_url})

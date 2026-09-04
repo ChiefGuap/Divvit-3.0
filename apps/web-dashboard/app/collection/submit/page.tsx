@@ -1,8 +1,14 @@
 "use client";
 
-/* Submit a video — the intake surface behind The Collection.
-   Drop a file, name the venue it is about, and watch each gate resolve:
-   duplicate -> theft -> venue. The verdict alone is not useful to a person;
+/* Screen a video before posting it — the CREATOR's screen.
+
+   The creator uploads their own footage here and gets a verdict before it
+   goes anywhere; the venue receives only what passes. Screening has to happen
+   before the post because neither platform will hand the video back
+   afterwards, so this is also where the fingerprint is taken that the claim
+   flow later matches the posted cover against.
+
+   Each gate reports separately: the verdict alone is not useful to a person,
    the gate that produced it is. */
 
 import React from "react";
@@ -121,9 +127,19 @@ export default function SubmitPage() {
   return (
     <>
       <PageHead
-        title="Submit a video"
-        subtitle="Runs the real intake gates: duplicate, ownership, then venue verification."
+        title="Screen your video"
+        subtitle="Check it before you post. Duplicate, ownership, then venue verification."
       />
+
+      <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14,
+                    padding: "9px 14px", borderRadius: 10, background: "var(--purple-tint)",
+                    fontSize: 12.5, color: "var(--purple-deepest)", ...fadeUp("0.02s") }}>
+        <Icon name="info" size={14} color="var(--purple-deep)" />
+        <span>
+          Creator screen — a preview of the app, hosted here until the app design lands.
+          Screen the clip here first, then post it and claim.
+        </span>
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(320px,1fr) minmax(340px,1.1fr)", gap: 18, alignItems: "start" }}>
         {/* ---------------------------------------------------------- form */}
@@ -154,12 +170,12 @@ export default function SubmitPage() {
             </span>
           </label>
 
-          <Field label="Submitter" value={submitter} onChange={setSubmitter}
+          <Field label="Your creator id" value={submitter} onChange={setSubmitter}
             placeholder="user id or handle"
             hint="Who is claiming this video. Two people submitting the same clip is how theft is caught." />
-          <Field label="Business" value={business} onChange={setBusiness}
+          <Field label="Which venue is this about?" value={business} onChange={setBusiness}
             placeholder="Coffee Dose"
-            hint="The venue the submitter says this is about. Verified against what the video actually shows." />
+            hint="Verified against what the video actually shows, not taken on trust." />
           <Field label="Location" value={location} onChange={setLocation}
             placeholder="Costa Mesa" hint="Optional, but it disambiguates common cafe names." />
 
@@ -186,8 +202,8 @@ export default function SubmitPage() {
             <div style={{ margin: "auto", textAlign: "center", maxWidth: 300 }}>
               <Icon name="shield" size={26} color="var(--text-faintest)" />
               <p style={{ margin: "10px 0 0", fontSize: 13.5, color: "var(--text-muted)", lineHeight: 1.6 }}>
-                Nothing submitted yet. Each gate reports separately — a rejection
-                names the gate that produced it.
+                Nothing screened yet. Each check reports separately, so a
+                rejection tells you what to fix rather than just failing.
               </p>
             </div>
           )}

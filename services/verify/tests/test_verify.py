@@ -2,7 +2,7 @@
 
 The expensive mistakes here are asymmetric, and the tests are weighted to match:
 
-  * **Rejecting a genuine claim over our own outage** loses that diner
+  * **Rejecting a genuine claim over our own outage** loses that creator
     permanently. A 5xx must never become a rejection.
   * **Paying a soft pass on an expensive reward** is the fraud the tier table
     exists to prevent.
@@ -43,7 +43,7 @@ def check(condition: bool, label: str) -> None:
         _failures.append(label)
 
 
-def oembed(handle="diner", vid="7300000000000000000", title="lunch"):
+def oembed(handle="creator", vid="7300000000000000000", title="lunch"):
     """A canned oEmbed body, shaped exactly like the live one."""
     return 200, {"author_unique_id": handle, "author_name": handle,
                  "title": title, "thumbnail_url": "https://cdn/t.jpg",
@@ -118,18 +118,18 @@ def test_snowflake() -> None:
 
 def test_ownership() -> None:
     print("\nownership")
-    post = PostMetadata(platform="tiktok", handle="diner")
-    check(gate_ownership(post, "diner").status == SOFT,
+    post = PostMetadata(platform="tiktok", handle="creator")
+    check(gate_ownership(post, "creator").status == SOFT,
           "a pasted link only ever ASSERTS ownership, so it soft-passes")
-    check(gate_ownership(post, "@Diner").status == SOFT,
+    check(gate_ownership(post, "@Creator").status == SOFT,
           "the @ and casing are normalised before comparing")
-    check(gate_ownership(post, "diner", connected=True).status == PASS,
+    check(gate_ownership(post, "creator", connected=True).status == PASS,
           "a connected account is enforced by the endpoint, so it hard-passes")
     check(gate_ownership(post, "someone_else").status == FAIL,
           "a different author fails outright")
     check(gate_ownership(post, "").status == NODATA,
           "no handle on file is missing data, not fraud")
-    check(gate_ownership(PostMetadata(platform="tiktok"), "diner").status == NODATA,
+    check(gate_ownership(PostMetadata(platform="tiktok"), "creator").status == NODATA,
           "a post with no author handle is missing data too")
 
 
@@ -145,7 +145,7 @@ def test_window() -> None:
                          created_at_source="snowflake")
     out = gate_window(stale, now=NOW)
     check(out.status == FAIL, "twenty-five hours old fails")
-    check("24 hours" in out.diner_message and "Post something new" in out.diner_message,
+    check("24 hours" in out.user_message and "Post something new" in out.user_message,
           "and the rejection names the fix rather than the failure")
 
     check(gate_window(PostMetadata(platform="instagram"), now=NOW).status == NODATA,
@@ -167,7 +167,7 @@ def test_content_match() -> None:
           "a cover that appears in the screened video passes")
     bad = gate_content_match(M(False, 23))
     check(bad.status == FAIL, "a cover from a different video fails")
-    check("video we reviewed" in bad.diner_message,
+    check("video we reviewed" in bad.user_message,
           "and the message tells them to post the clip they submitted")
     check(gate_content_match(None).status == NODATA,
           "nothing to compare holds for review rather than passing by default — "
@@ -191,7 +191,7 @@ def test_shadow_mode_holds_everything() -> None:
         matched, distance, similarity, best_frame = True, 2, 0.97, 3
 
     vid = recent_id()
-    r = verify_claim(f"https://www.tiktok.com/@diner/video/{vid}", "diner", tier=1,
+    r = verify_claim(f"https://www.tiktok.com/@creator/video/{vid}", "creator", tier=1,
                      cover_result=M(), connected=True, now=NOW,
                      fetcher=fetcher_for(*oembed(vid=vid)))
     check(r.verdict == HOLD,
@@ -213,7 +213,7 @@ def test_routing_and_tiers() -> None:
     def claim(tier, connected=False, **kw):
         vid = recent_id()
         return verify_claim(
-            f"https://www.tiktok.com/@diner/video/{vid}", "diner", tier=tier,
+            f"https://www.tiktok.com/@creator/video/{vid}", "creator", tier=tier,
             cover_result=M(), connected=connected, now=NOW,
             fetcher=fetcher_for(*oembed(vid=vid)), **kw)
 
@@ -259,10 +259,10 @@ def _run_tier_checks(claim) -> None:
               "one dimension under the mark fails, however good the rest are — "
               "the dimensions are scored independently, not averaged")
         check("venue" in weak.reason, "and the failing dimension is named internally")
-        check("41" not in weak.diner_message and "70" not in weak.diner_message,
-              "while no score or pass mark leaks to the diner — those are what a "
+        check("41" not in weak.user_message and "70" not in weak.user_message,
+              "while no score or pass mark leaks to the creator — those are what a "
               "fraudster would calibrate against")
-        check("show the space" in weak.diner_message,
+        check("show the space" in weak.user_message,
               "and the message names the fix: what to film, not what failed")
         check(G.gate_screening({**good, "venue": 75}, tier=4).status == FAIL,
               "tier 4 raises the mark by 10, so 75 passes at tier 1 and fails here")
@@ -272,30 +272,30 @@ def _run_tier_checks(claim) -> None:
 
 def test_outage_is_never_a_rejection() -> None:
     """The single easiest thing to get wrong: a rate limit that rejects a real
-    claim costs a diner permanently."""
+    claim costs a creator permanently."""
     print("\noutages")
     vid = recent_id()
-    url = f"https://www.tiktok.com/@diner/video/{vid}"
+    url = f"https://www.tiktok.com/@creator/video/{vid}"
 
-    r = verify_claim(url, "diner", tier=2, now=NOW, fetcher=fetcher_for(503))
+    r = verify_claim(url, "creator", tier=2, now=NOW, fetcher=fetcher_for(503))
     check(r.verdict == RETRY_LATER, "a 5xx is a retry, NOT a rejection")
-    check("keep trying" in r.diner_message.lower(),
-          "and the diner is told we will keep trying")
-    check("try again" not in r.diner_message.lower(),
+    check("keep trying" in r.user_message.lower(),
+          "and the creator is told we will keep trying")
+    check("try again" not in r.user_message.lower(),
           "with no call to action — they did nothing wrong, and asking them to "
           "retry implies they did")
 
-    gone = verify_claim(url, "diner", tier=2, now=NOW, fetcher=fetcher_for(404))
+    gone = verify_claim(url, "creator", tier=2, now=NOW, fetcher=fetcher_for(404))
     check(gone.verdict == REJECT,
           "a 404 IS a rejection — the post is genuinely not public")
-    check("publicly visible" in gone.diner_message,
-          "and says so in terms the diner can act on")
+    check("publicly visible" in gone.user_message,
+          "and says so in terms the creator can act on")
 
 
 def test_short_circuit_saves_the_expensive_call() -> None:
     print("\nshort-circuit")
     vid = recent_id(hours_ago=200)      # outside the window
-    r = verify_claim(f"https://www.tiktok.com/@diner/video/{vid}", "diner", tier=2,
+    r = verify_claim(f"https://www.tiktok.com/@creator/video/{vid}", "creator", tier=2,
                      now=NOW, fetcher=fetcher_for(*oembed(vid=vid)))
     check(r.verdict == REJECT, "a stale post is rejected")
     by_gate = {g.gate: g for g in r.gates}
@@ -307,23 +307,23 @@ def test_short_circuit_saves_the_expensive_call() -> None:
           "but every gate is still reported, so the audit trail shows what was "
           "skipped rather than omitting it")
 
-    private = verify_claim("https://www.tiktok.com/@diner/video/7300000000000000000",
-                           "diner", tier=2, now=NOW, fetcher=fetcher_for(404))
+    private = verify_claim("https://www.tiktok.com/@creator/video/7300000000000000000",
+                           "creator", tier=2, now=NOW, fetcher=fetcher_for(404))
     skipped = [g.gate for g in private.gates if g.status == SKIPPED]
     check(len(skipped) == 4,
           "a private post costs one HTTP call and skips the other four gates")
 
 
-def test_diner_copy_hides_the_machinery() -> None:
-    print("\nwhat the diner sees")
+def test_creator_copy_hides_the_machinery() -> None:
+    print("\nwhat the creator sees")
     vid = recent_id()
-    r = verify_claim(f"https://www.tiktok.com/@someone_else/video/{vid}", "diner",
+    r = verify_claim(f"https://www.tiktok.com/@someone_else/video/{vid}", "creator",
                      tier=2, now=NOW, fetcher=fetcher_for(*oembed(handle="someone_else", vid=vid)))
     check(r.verdict == REJECT, "a mismatched author is rejected")
-    msg = r.diner_message.lower()
+    msg = r.user_message.lower()
     check("ownership" not in msg and "gate" not in msg,
           "the message names no gate — 'ownership' reads as an accusation")
-    check("%" not in r.diner_message and "score" not in msg,
+    check("%" not in r.user_message and "score" not in msg,
           "and no score, which is exactly the feedback a fraudster would "
           "calibrate against")
 
@@ -333,7 +333,7 @@ def main() -> int:
               test_content_match, test_routing_and_tiers,
               test_outage_is_never_a_rejection,
               test_short_circuit_saves_the_expensive_call,
-              test_diner_copy_hides_the_machinery):
+              test_creator_copy_hides_the_machinery):
         t()
     print()
     if _failures:

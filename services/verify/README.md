@@ -54,7 +54,7 @@ approves a stale post is worse than having none.
 ## Gate 4 — content match, calibrated
 
 The hole the spec identifies: screening and posting are separate acts, so
-without this gate a diner can get a clean screening on one clip and post a
+without this gate a creator can get a clean screening on one clip and post a
 different video. Nothing else looks at what actually went up.
 
 `fingerprint.cover_match` hashes the posted cover on the same 9x8 grid the
@@ -90,7 +90,7 @@ does not bite until calibration happens.
 ## Two rules the tests exist to protect
 
 **Infrastructure failure is not fraud.** A 5xx or a transport error returns
-`retry`, never `reject`, and the diner sees "we'll keep trying" with *no call
+`retry`, never `reject`, and the creator sees "we'll keep trying" with *no call
 to action* — they did nothing wrong, and asking them to retry implies they
 did. A 404 is a genuine rejection, because the post really is not public.
 
@@ -108,7 +108,7 @@ videos, so ownership is refused rather than inferred.
 
 No network. Covers outage-vs-rejection, tier routing, short-circuit ordering
 (a private post costs one HTTP call, not five), and that no gate name or score
-leaks into diner-facing copy.
+leaks into creator-facing copy.
 
 ## On the frontend
 
@@ -116,7 +116,7 @@ leaks into diner-facing copy.
 five checks resolve, and the post renders beside them with its cover frame,
 caption and decoded timestamp.
 
-The page has two views. **Diner** shows five plain-language steps — *Finding
+The page has two views. **Creator** shows five plain-language steps — *Finding
 your post, Matching your account, Checking the timing, Confirming your video,
 Reviewing your video* — and one sentence naming the fix. No gate names, no
 scores. **Staff** adds the engine's own reason per gate, the verdict, which
@@ -134,7 +134,7 @@ arrive together. The dedupe check runs *before* the gates: a link already paid
 out costs nothing to detect, and running five gates on it, one of which
 downloads a file, would be paying to re-answer a settled question. The
 duplicate response carries the original post metadata from the stored row, so
-the diner can see which post it was without a second fetch.
+the creator can see which post it was without a second fetch.
 
 Only **paid** verdicts schedule a re-check — there is nothing to claw back
 from a claim that never paid. At T+7 only gate 1 re-runs: the other four
@@ -174,7 +174,7 @@ fixed-width and in-place, so forging it is a search-and-replace.
 
 So EXIF may be *read* as a weak signal (missing, inconsistent, or contradicting
 the claim are all worth logging) but it can never gate a payout. Screenshot
-evidence stays what the spec says it is: tier 1-2 only, capped per diner, and
+evidence stays what the spec says it is: tier 1-2 only, capped per creator, and
 flagged unverified in the venue's library.
 
 ## Not built

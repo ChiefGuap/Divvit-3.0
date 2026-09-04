@@ -102,7 +102,7 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("url")
     c.add_argument("--submitter", required=True)
     c.add_argument("--handle", required=True,
-                   help="the platform handle on file for this diner")
+                   help="the platform handle on file for this creator")
     c.add_argument("--tier", type=int, default=1, choices=[1, 2, 3, 4])
     c.add_argument("--submission", help="screening id to match against")
     c.add_argument("--intake-db", default="data/intake.db")
@@ -124,7 +124,7 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("stats", help="claim totals")
     s.set_defaults(func=cmd_stats)
 
-    la = sub.add_parser("link", help="link a platform account to a diner")
+    la = sub.add_parser("link", help="link a platform account to a creator")
     la.add_argument("--submitter", required=True)
     la.add_argument("--platform", required=True, choices=["tiktok", "youtube", "instagram"])
     la.add_argument("--handle", required=True)
@@ -133,7 +133,7 @@ def build_parser() -> argparse.ArgumentParser:
     la.add_argument("--accounts-db", default="data/accounts.db")
     la.set_defaults(func=cmd_link)
 
-    ls = sub.add_parser("accounts", help="linked accounts for a diner")
+    ls = sub.add_parser("accounts", help="linked accounts for a creator")
     ls.add_argument("--submitter", required=True)
     ls.add_argument("--accounts-db", default="data/accounts.db")
     ls.set_defaults(func=cmd_accounts)

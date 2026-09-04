@@ -14,7 +14,7 @@ Two rules that matter more than the gates themselves:
 
 **Infrastructure failure is not fraud.** A timeout, a 5xx, or a rate limit
 returns RETRY. It must never be reported as a rejection: rejecting a genuine
-claim over our own downtime loses that diner permanently, and it is the
+claim over our own downtime loses that creator permanently, and it is the
 easiest thing in this system to get wrong.
 
 **A soft pass is not a pass.** Where a link is *asserted* rather than *proven*
@@ -67,10 +67,10 @@ class GateOutcome:
     status: str
     reason: str = ""
     evidence: dict[str, Any] = field(default_factory=dict)
-    # What the diner is shown. Never the gate name, never a score: "Ownership"
+    # What the creator is shown. Never the gate name, never a score: "Ownership"
     # reads as an accusation, and a similarity percentage is exactly the
     # feedback someone calibrating against us would want.
-    diner_message: str = ""
+    user_message: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -83,13 +83,13 @@ class ClaimResult:
     gates: list[GateOutcome] = field(default_factory=list)
     post: Optional[dict[str, Any]] = None
     soft_passes: list[str] = field(default_factory=list)
-    diner_message: str = ""
+    user_message: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {"verdict": self.verdict, "tier": self.tier,
                 "gates": [g.to_dict() for g in self.gates],
                 "post": self.post, "soft_passes": self.soft_passes,
-                "diner_message": self.diner_message}
+                "user_message": self.user_message}
 
 
 # ------------------------------------------------------------------- gates
@@ -99,18 +99,18 @@ def gate_resolve(url: str, fetcher: Optional[Callable] = None
     try:
         link = resolve_link(url)
     except LinkError as exc:
-        return GateOutcome("resolve", FAIL, str(exc), diner_message=(
+        return GateOutcome("resolve", FAIL, str(exc), user_message=(
             "That link doesn't look like a TikTok or Instagram post.")), None, None
 
     if not link.supported:
         return GateOutcome("resolve", NODATA, link.note, {"platform": link.platform},
-                           diner_message=(
+                           user_message=(
                                "We can't check Instagram links yet. Connect your "
                                "account, or post on TikTok and paste that link.")
                            ), link, None
     if link.needs_redirect:
         return GateOutcome("resolve", NODATA, link.note, {"platform": link.platform},
-                           diner_message=(
+                           user_message=(
                                "Open the post and copy the full link from the address "
                                "bar, then paste that.")), link, None
 
@@ -118,12 +118,12 @@ def gate_resolve(url: str, fetcher: Optional[Callable] = None
         post = fetch_post(link, fetch=fetcher) if fetcher else fetch_post(link)
     except LinkError as exc:
         # 5xx / transport. Never a reject.
-        return GateOutcome("resolve", RETRY, str(exc), diner_message=(
+        return GateOutcome("resolve", RETRY, str(exc), user_message=(
             "We're having trouble reaching TikTok. We'll keep trying.")), link, None
 
     if not post.live:
         return GateOutcome("resolve", FAIL, "post is not publicly visible",
-                           {"video_id": link.video_id}, diner_message=(
+                           {"video_id": link.video_id}, user_message=(
                                "That post isn't publicly visible. Make sure it's live "
                                "and your account isn't private, then try again.")
                            ), link, post
@@ -141,14 +141,14 @@ def gate_ownership(post: PostMetadata, handle_on_file: str,
     actual = (post.handle or "").lstrip("@").lower()
     if not claimed:
         return GateOutcome("ownership", NODATA, "no handle on file",
-                           diner_message="Add your TikTok username to your profile first.")
+                           user_message="Add your TikTok username to your profile first.")
     if not actual:
         return GateOutcome("ownership", NODATA, "post returned no author handle")
     if actual != claimed:
         return GateOutcome("ownership", FAIL,
                            f"post author @{actual} != @{claimed} on file",
                            {"author": actual, "on_file": claimed},
-                           diner_message="That post was made by a different account.")
+                           user_message="That post was made by a different account.")
     if connected:
         return GateOutcome("ownership", PASS, "enforced by the connected account",
                            {"author": actual, "proof": "platform_enforced"})
@@ -162,7 +162,7 @@ def gate_window(post: PostMetadata, now: Optional[datetime] = None) -> GateOutco
     now = now or datetime.now(timezone.utc)
     if not post.created_at:
         return GateOutcome("window", NODATA, "no timestamp available for this platform",
-                           {"source": post.created_at_source}, diner_message=(
+                           {"source": post.created_at_source}, user_message=(
                                "We couldn't tell when this was posted. Connect your "
                                "account and we can check it automatically."))
     created = datetime.fromisoformat(post.created_at)
@@ -171,7 +171,7 @@ def gate_window(post: PostMetadata, now: Optional[datetime] = None) -> GateOutco
                 "source": post.created_at_source}
     if age > CLAIM_WINDOW:
         return GateOutcome("window", FAIL, f"posted {age.total_seconds()/3600:.1f}h ago",
-                           evidence, diner_message=(
+                           evidence, user_message=(
                                "Claims close 24 hours after posting. Post something new "
                                "and claim it the same day."))
     if age.total_seconds() < 0:
@@ -182,14 +182,14 @@ def gate_window(post: PostMetadata, now: Optional[datetime] = None) -> GateOutco
 def gate_content_match(cover_result: Optional[Any]) -> GateOutcome:
     """Gate 4 — the hole in the model, and the reason it is worth building.
 
-    Screening and posting are separate acts, so without this a diner can get a
+    Screening and posting are separate acts, so without this a creator can get a
     clean screening on one clip and post a different video entirely. Nothing
     else in the chain is looking at what actually went up.
     """
     if cover_result is None:
         return GateOutcome("content_match", NODATA,
                            "no cover frame to compare, or nothing screened for this claim",
-                           diner_message=("We couldn't check the video. We'll take a look "
+                           user_message=("We couldn't check the video. We'll take a look "
                                           "and get back to you."))
     if getattr(cover_result, "matched", False):
         return GateOutcome("content_match", PASS, "",
@@ -201,7 +201,7 @@ def gate_content_match(cover_result: Optional[Any]) -> GateOutcome:
                        f"({cover_result.distance} bits)",
                        {"distance_bits": cover_result.distance,
                         "similarity": cover_result.similarity},
-                       diner_message=("That's not the video we reviewed. Post the clip you "
+                       user_message=("That's not the video we reviewed. Post the clip you "
                                       "submitted in the app, then claim again."))
 
 
@@ -218,7 +218,7 @@ def gate_screening(scores: Optional[dict[str, float]], tier: int) -> GateOutcome
         return GateOutcome("screening", NODATA,
                            "shadow mode — scores are logged, not enforced",
                            {"pass_mark": mark, "scores": scores or {}, "shadow": True},
-                           diner_message="")
+                           user_message="")
     if not scores:
         return GateOutcome("screening", NODATA, "no scores returned", {"pass_mark": mark})
     weakest = min(scores.items(), key=lambda kv: kv[1])
@@ -226,7 +226,7 @@ def gate_screening(scores: Optional[dict[str, float]], tier: int) -> GateOutcome
         return GateOutcome("screening", FAIL,
                            f"{weakest[0]} scored {weakest[1]:.0f}, below {mark}",
                            {"scores": scores, "pass_mark": mark},
-                           diner_message=("We couldn't see the venue — show the space, the "
+                           user_message=("We couldn't see the venue — show the space, the "
                                           "sign, or the food, then post again."))
     return GateOutcome("screening", PASS, "", {"scores": scores, "pass_mark": mark})
 
@@ -234,12 +234,12 @@ def gate_screening(scores: Optional[dict[str, float]], tier: int) -> GateOutcome
 # ------------------------------------------------------------------ routing
 
 def route(gates: list[GateOutcome], tier: int) -> tuple[str, str]:
-    """Gate outcomes -> a verdict and the one line the diner sees."""
+    """Gate outcomes -> a verdict and the one line the creator sees."""
     if any(g.status == RETRY for g in gates):
         return RETRY_LATER, "We're having trouble checking your post. We'll keep trying."
     failed = next((g for g in gates if g.status == FAIL), None)
     if failed:
-        return REJECT, failed.diner_message or "We couldn't verify this claim."
+        return REJECT, failed.user_message or "We couldn't verify this claim."
     if any(g.status == NODATA for g in gates):
         return HOLD, "We're taking a closer look at this one. You'll hear from us shortly."
 
@@ -276,7 +276,7 @@ def verify_claim(url: str, handle_on_file: str, tier: int = 1,
         return ClaimResult(verdict=verdict, tier=tier, gates=gates,
                            post=post.to_dict() if post else None,
                            soft_passes=[g.gate for g in gates if g.status == SOFT],
-                           diner_message=message)
+                           user_message=message)
 
     if g1.status in (FAIL, RETRY, NODATA) or post is None:
         return finish()
@@ -298,4 +298,4 @@ def verify_claim(url: str, handle_on_file: str, tier: int = 1,
     return ClaimResult(verdict=verdict, tier=tier, gates=gates,
                        post=post.to_dict() if post else None,
                        soft_passes=[g.gate for g in gates if g.status == SOFT],
-                       diner_message=message)
+                       user_message=message)

@@ -62,8 +62,8 @@ def test_impersonation_is_refused() -> None:
     s.link("d1", "tiktok", "foodie", method=METHOD_OAUTH)
 
     ok, why = s.ownership_proof("d2", "tiktok", "foodie")
-    check(not ok, "a second diner cannot claim an account someone else proved")
-    check("different diner" in why,
+    check(not ok, "a second creator cannot claim an account someone else proved")
+    check("different creator" in why,
           "and the reason distinguishes impersonation from a missing link — "
           "they are different problems")
 
@@ -88,7 +88,7 @@ def test_one_owner_per_handle() -> None:
     s.link("d1", "tiktok", "shared", method=METHOD_OAUTH)
     s.link("d2", "tiktok", "shared", method=METHOD_OAUTH)
     # The unique index means the later link replaces the earlier one rather
-    # than both existing — two diners can never both hold a live claim on it.
+    # than both existing — two creators can never both hold a live claim on it.
     check(len(s.for_submitter("d1")) == 0 and len(s.for_submitter("d2")) == 1,
           "a re-link moves the account rather than duplicating it")
 

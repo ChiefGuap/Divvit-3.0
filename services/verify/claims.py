@@ -177,7 +177,7 @@ def download_cover(url: str, timeout: int = 30) -> Optional[Path]:
 def screened_fingerprint(intake: IntakeStore, submitter_id: str,
                          submission_id: Optional[str] = None
                          ) -> tuple[Optional[VideoFingerprint], Optional[str]]:
-    """The fingerprint taken when the diner screened the video in-app.
+    """The fingerprint taken when the creator screened the video in-app.
 
     Without an explicit submission id, the most recent screening by that
     submitter is used — which is what "screen it, then post it" produces in
@@ -219,7 +219,7 @@ def process_claim(url: str, submitter_id: str, handle_on_file: str,
         link = resolve_link(url)
     except LinkError as exc:
         return {"verdict": "reject", "tier": tier, "gates": [],
-                "diner_message": "That link doesn't look like a TikTok or Instagram post.",
+                "user_message": "That link doesn't look like a TikTok or Instagram post.",
                 "error": str(exc)}
 
     prior = store.prior_claim(link.platform, link.video_id) if link.video_id else None
@@ -229,10 +229,10 @@ def process_claim(url: str, submitter_id: str, handle_on_file: str,
                              f" by {prior['submitter_id']}",
                              {"prior_claim": prior["claim_id"],
                               "prior_verdict": prior["verdict"]},
-                             diner_message="You've already claimed this post.")]
+                             user_message="You've already claimed this post.")]
         for g in ("ownership", "window", "content_match", "screening"):
             gates.append(GateOutcome(g, SKIPPED, "not reached — this post was already claimed"))
-        # The post metadata from the original claim, so the diner can see
+        # The post metadata from the original claim, so the creator can see
         # *which* post this was — carried from the row we already read rather
         # than re-fetching, which would pay to answer a settled question.
         try:
@@ -242,7 +242,7 @@ def process_claim(url: str, submitter_id: str, handle_on_file: str,
         return {"verdict": "reject", "tier": tier,
                 "gates": [g.to_dict() for g in gates],
                 "post": prior_post, "soft_passes": [],
-                "diner_message": "You've already claimed this post.",
+                "user_message": "You've already claimed this post.",
                 "duplicate_of": prior["claim_id"],
                 "claimed_at": prior["created_at"]}
 

@@ -2,7 +2,13 @@
 
 /* Claim a reward against a posted link.
 
-   The five gates tick in order, and the post plays alongside them. That
+   This is the CREATOR's screen, not the venue's. The creator films, screens,
+   posts, and claims; the venue only ever receives what passes. It lives on
+   the dashboard until the app design lands, so it is framed as a preview
+   rather than as venue tooling — a staff toggle exposes the machinery for
+   support, and everything else is written to be read by the person claiming.
+
+   The five gates tick in order and the post renders alongside them. That
    pairing is the point: a rejection is only actionable if you can see the
    post it is about. */
 
@@ -15,7 +21,7 @@ type Gate = {
   status: "pass" | "soft" | "fail" | "no_data" | "retry" | "skipped" | string;
   reason?: string;
   evidence?: Record<string, unknown>;
-  diner_message?: string;
+  user_message?: string;
 };
 
 type Post = {
@@ -35,7 +41,7 @@ type Claim = {
   gates?: Gate[];
   post?: Post | null;
   soft_passes?: string[];
-  diner_message?: string;
+  user_message?: string;
   screened?: boolean;
   ownership_proof?: { connected: boolean; reason: string };
   claim_id?: string;
@@ -52,7 +58,7 @@ const VERDICT: Record<string, { label: string; fg: string; bg: string; icon: Ico
   retry:             { label: "Trying again",    fg: "#4b5563", bg: "rgba(107,114,128,0.12)", icon: "info" },
 };
 
-/* Five steps, in the order they run. The diner sees these names — never the
+/* Five steps, in the order they run. The creator sees these names — never the
    gate names. "Ownership" and "Content match" read as accusations; these read
    as housekeeping. */
 const STEP_LABEL: Record<string, string> = {
@@ -115,10 +121,20 @@ export default function ClaimPage() {
         subtitle="Paste the link to your post. Five checks run in about two seconds."
         action={
           <QuietButton onClick={() => setStaff((s) => !s)}>
-            {staff ? "Diner view" : "Staff view"}
+            {staff ? "Creator view" : "Staff view"}
           </QuietButton>
         }
       />
+
+      <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14,
+                    padding: "9px 14px", borderRadius: 10, background: "var(--purple-tint)",
+                    fontSize: 12.5, color: "var(--purple-deepest)", ...fadeUp("0.02s") }}>
+        <Icon name="info" size={14} color="var(--purple-deep)" />
+        <span>
+          Creator screen — a preview of the app, hosted here until the app design lands.
+          The venue only ever sees what passes.
+        </span>
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(300px,0.9fr) minmax(320px,1fr) minmax(260px,0.8fr)",
                     gap: 18, alignItems: "start" }}>
@@ -127,10 +143,12 @@ export default function ClaimPage() {
           <Field label="Your post link" value={url} onChange={setUrl}
             placeholder="https://www.tiktok.com/@you/video/…"
             hint="TikTok works from a pasted link. Instagram needs a connected account." />
-          <Field label="Diner" value={submitter} onChange={setSubmitter} placeholder="user id" />
-          <Field label="TikTok handle on file" value={handle} onChange={setHandle}
+          <Field label="Your creator id" value={submitter} onChange={setSubmitter}
+            placeholder="user id"
+            hint="Stands in for the signed-in account until this moves into the app." />
+          <Field label="Your TikTok handle" value={handle} onChange={setHandle}
             placeholder="@yourhandle"
-            hint="Checked against the post's author." />
+            hint="Checked against the post's author. Connect the account to prove it's yours." />
 
           <label style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             <span style={{ fontSize: 12.5, fontWeight: 650 }}>Reward tier</span>
@@ -143,7 +161,7 @@ export default function ClaimPage() {
               ))}
             </select>
             <span style={{ fontSize: 11.5, color: "var(--text-muted)", lineHeight: 1.5 }}>
-              Higher tiers hold anything that isn&apos;t fully proven, rather than paying it out.
+              Bigger rewards hold anything that isn&apos;t fully proven, rather than paying it out.
             </span>
           </label>
 
@@ -212,7 +230,7 @@ export default function ClaimPage() {
               </div>
 
               <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: "var(--ink)" }}>
-                {claim?.diner_message}
+                {claim?.user_message}
               </p>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 9, paddingTop: 8,
@@ -233,7 +251,7 @@ export default function ClaimPage() {
                                        color: g.status === "skipped" ? "var(--text-faint)" : "var(--ink)" }}>
                           {label}
                         </span>
-                        {/* Staff see the engine's own reason. Diners see only
+                        {/* Staff see the engine's own reason. Creators see only
                             the line written for them — no gate names, no
                             scores, because those are what a fraudster would
                             calibrate against. */}
