@@ -34,7 +34,7 @@ CREATE INDEX IF NOT EXISTS idx_businesses_partner ON businesses(is_partner);
 CREATE TYPE venue_resolution_verdict AS ENUM ('confirmed', 'needs_review', 'unknown');
 
 CREATE TABLE IF NOT EXISTS submission_venues (
-  id             UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  id             UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   submission_id  UUID REFERENCES submissions(id) ON DELETE CASCADE,
   business_id    UUID REFERENCES businesses(id) ON DELETE CASCADE,
   verdict        venue_resolution_verdict NOT NULL,
@@ -57,7 +57,7 @@ CREATE INDEX IF NOT EXISTS idx_submission_venues_verdict
 -- Venue names screening read that match no business we know about. Each row is
 -- a business that exists, has customers filming it, and is not on Divvit yet.
 CREATE TABLE IF NOT EXISTS unresolved_venues (
-  id            UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   evidence      TEXT NOT NULL,
   times_seen    INT DEFAULT 1,
   first_seen    TIMESTAMPTZ DEFAULT NOW(),

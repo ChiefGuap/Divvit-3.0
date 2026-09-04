@@ -1,5 +1,7 @@
 -- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- gen_random_uuid() is built into Postgres 13+, so no extension is
+-- needed. uuid-ossp installs into the `extensions` schema on Supabase
+-- and its unqualified call fails there.
 
 -- 1. Profiles (Users)
 CREATE TABLE profiles (
@@ -13,7 +15,7 @@ CREATE TABLE profiles (
 
 -- 2. Businesses
 CREATE TABLE businesses (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL,
   logo_url TEXT,
   description TEXT,
@@ -23,7 +25,7 @@ CREATE TABLE businesses (
 
 -- 3. Campaigns & Video Instructions
 CREATE TABLE campaigns (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   instructions TEXT,
@@ -36,7 +38,7 @@ CREATE TYPE video_status AS ENUM ('pending', 'accepted', 'passed', 'archived');
 CREATE TYPE submission_source AS ENUM ('raw_upload', 'social_link');
 
 CREATE TABLE submissions (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
   business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
   campaign_id UUID REFERENCES campaigns(id),
@@ -50,7 +52,7 @@ CREATE TABLE submissions (
 
 -- 5. Rewards
 CREATE TABLE rewards (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   reward_type TEXT NOT NULL,

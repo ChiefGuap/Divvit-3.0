@@ -57,7 +57,7 @@ COMMENT ON COLUMN businesses.organic_brand_health_score IS
 -- see. Mirrors services/venues cafe_signals, flattened so the dashboard can
 -- query a rating without unpacking JSON.
 CREATE TABLE IF NOT EXISTS venue_signals (
-  id                     UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  id                     UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   business_id            UUID NOT NULL UNIQUE REFERENCES businesses(id) ON DELETE CASCADE,
   collected_at           TIMESTAMPTZ,
 
@@ -88,7 +88,7 @@ CREATE INDEX IF NOT EXISTS idx_venue_signals_business ON venue_signals(business_
 -- Appended, never overwritten: "are we improving" is the renewal question and
 -- a single current value cannot answer it.
 CREATE TABLE IF NOT EXISTS brand_health_snapshots (
-  id           UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  id           UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   business_id  UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
   captured_at  TIMESTAMPTZ NOT NULL,
 
@@ -118,7 +118,7 @@ CREATE INDEX IF NOT EXISTS idx_bh_rankable
 -- -------------------------------------------------------------- creators
 
 CREATE TABLE IF NOT EXISTS creators (
-  id              UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   key             TEXT NOT NULL UNIQUE,      -- platform:handle
   platform        TEXT NOT NULL,
   handle          TEXT NOT NULL,
@@ -142,7 +142,7 @@ CREATE INDEX IF NOT EXISTS idx_creators_platform ON creators(platform);
 -- Default rights are `unlicensed_reference` — nothing here is licensed to
 -- repost.
 CREATE TABLE IF NOT EXISTS discovered_videos (
-  id                     UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  id                     UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   canonical_id           TEXT NOT NULL UNIQUE,     -- platform:video_id
   business_id            UUID REFERENCES businesses(id) ON DELETE SET NULL,
   creator_id             UUID REFERENCES creators(id) ON DELETE SET NULL,
@@ -248,7 +248,7 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE TABLE IF NOT EXISTS reward_redemptions (
-  id            UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   reward_id     UUID REFERENCES rewards(id) ON DELETE CASCADE,
   business_id   UUID REFERENCES businesses(id) ON DELETE CASCADE,
   profile_id    UUID REFERENCES profiles(id) ON DELETE SET NULL,
@@ -270,7 +270,7 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE TABLE IF NOT EXISTS content_items (
-  id                   UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  id                   UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   business_id          UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
   submission_id        UUID REFERENCES submissions(id) ON DELETE SET NULL,
   creator_id           UUID REFERENCES creators(id) ON DELETE SET NULL,
@@ -307,7 +307,7 @@ CREATE INDEX IF NOT EXISTS idx_content_business_state
 -- ------------------------------------------------------------- editor cuts
 
 CREATE TABLE IF NOT EXISTS editor_cuts (
-  id                   UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  id                   UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   business_id          UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
   title                TEXT NOT NULL,
   style_id             TEXT,
@@ -342,7 +342,7 @@ CREATE INDEX IF NOT EXISTS idx_editor_cuts_business
 -- Realtime, so the feed is a real stream that happens to be empty rather than
 -- a setInterval over a pool of invented events.
 CREATE TABLE IF NOT EXISTS activity_events (
-  id          UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
   kind        TEXT NOT NULL,     -- clip_submitted | reward_redeemed
   actor_name  TEXT,

@@ -258,6 +258,18 @@ def cmd_harvest(args) -> int:
     return 0
 
 
+def cmd_backfill_cities(args) -> int:
+    """294 of 686 cafes arrived from Overpass with no city, and almost none
+    carry a street or postcode to derive one from. Reverse geocoding was
+    validated first against the 12 rows that did hold a postcode: it agreed
+    12 times out of 12."""
+    from services.venues.geocode import backfill
+    counts = backfill(args.db, limit=args.limit,
+                      on_status=lambda m: print(m, file=sys.stderr, flush=True))
+    print(json.dumps(counts, indent=2))
+    return 0
+
+
 def cmd_export(args) -> int:
     """Write the documented seed contract — see export.py's module docstring."""
     from .export import write_export
@@ -362,6 +374,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--force-refresh", action="store_true",
                    help="re-fetch from Overpass even when cached")
     p.set_defaults(func=cmd_roster)
+
+    p = sub.add_parser("backfill-cities",
+                       help="reverse geocode cafes that have no city")
+    p.add_argument("--limit", type=int,
+                   help="stop after N (use a small number to check cost first)")
+    p.add_argument("--db", default="data/venues.db")
+    p.set_defaults(func=cmd_backfill_cities)
 
     p = sub.add_parser("metrics", help="collect public signal for pending cafes")
     common(p)
