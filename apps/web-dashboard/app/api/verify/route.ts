@@ -36,7 +36,10 @@ export async function POST(request: Request) {
   const submitter = String(body.submitter ?? "").trim();
   const handle = String(body.handle ?? "").trim().replace(/^@/, "");
   const tier = Number(body.tier ?? 1);
-  const connected = Boolean(body.connected);
+  // `connected` is deliberately NOT read from the body. Ownership proof is
+  // looked up server-side from the linked-accounts store; a request that could
+  // assert it would be able to upgrade its own ownership gate from a soft pass
+  // to a hard pass, defeating the tier rule that holds expensive rewards.
 
   if (!url) return NextResponse.json({ error: "paste a link first" }, { status: 400 });
   if (url.length > MAX_URL)
@@ -55,7 +58,6 @@ export async function POST(request: Request) {
     "--submitter", submitter,
     "--handle", handle,
     "--tier", String(tier),
-    ...(connected ? ["--connected"] : []),
   ];
 
   try {

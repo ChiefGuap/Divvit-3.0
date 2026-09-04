@@ -34,6 +34,8 @@ from typing import Any, Iterator, Optional
 from services.intake.fingerprint import CoverMatch, VideoFingerprint, cover_match
 from services.intake.store import IntakeStore
 
+from .accounts import AccountStore
+
 from .gates import (APPROVE, APPROVE_SOFT, ClaimResult, GateOutcome, FAIL,
                     NODATA, RECHECK_AFTER_DAYS, SKIPPED, TIERS, route,
                     verify_claim)
@@ -198,9 +200,9 @@ def screened_fingerprint(intake: IntakeStore, submitter_id: str,
 
 def process_claim(url: str, submitter_id: str, handle_on_file: str,
                   tier: int = 1, submission_id: Optional[str] = None,
-                  connected: bool = False,
                   intake: Optional[IntakeStore] = None,
                   store: Optional[ClaimStore] = None,
+                  accounts: Optional[AccountStore] = None,
                   now: Optional[datetime] = None) -> dict[str, Any]:
     """Full pipeline: resolve, dedupe the post, match the cover, run the gates.
 
@@ -211,6 +213,7 @@ def process_claim(url: str, submitter_id: str, handle_on_file: str,
     """
     intake = intake or IntakeStore()
     store = store or ClaimStore()
+    accounts = accounts or AccountStore()
 
     try:
         link = resolve_link(url)
@@ -243,6 +246,13 @@ def process_claim(url: str, submitter_id: str, handle_on_file: str,
                 "duplicate_of": prior["claim_id"],
                 "claimed_at": prior["created_at"]}
 
+    # Ownership proof is looked up, never accepted from the caller. A request
+    # that could assert `connected` would be able to upgrade its own gate 2
+    # from a soft pass to a hard pass, which is precisely the check that stops
+    # an expensive reward paying out on an asserted identity.
+    connected, proof_reason = accounts.ownership_proof(
+        submitter_id, link.platform, handle_on_file)
+
     # Gate 4 inputs: what we screened, and what they posted.
     fingerprint, used_submission = screened_fingerprint(intake, submitter_id, submission_id)
     cover_path: Optional[Path] = None
@@ -274,6 +284,7 @@ def process_claim(url: str, submitter_id: str, handle_on_file: str,
     payload = result.to_dict()
     payload["submission_id"] = used_submission
     payload["screened"] = fingerprint is not None
+    payload["ownership_proof"] = {"connected": connected, "reason": proof_reason}
 
     claim_id = f"clm_{link.platform}_{link.video_id}"[:64]
     if link.video_id:

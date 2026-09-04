@@ -142,6 +142,41 @@ judged facts that cannot change, and liveness is the thing being attacked. An
 unreachable platform **defers**, leaving the claim due; our downtime is not
 their fraud, at re-check time just as at claim time.
 
+## Ownership, and the hole that was in it
+
+`connected` used to be read from the request body. A client could send
+`{"connected": true}` and turn its own soft-passed ownership into a hard pass
+— the exact check standing between an asserted identity and a free entrée.
+
+It is now derived server-side in `accounts.py` and is never an input. Three
+outcomes, all measured against a stored link:
+
+| State | Gate 2 |
+|---|---|
+| no linked account | **soft** — a pasted link asserts ownership |
+| handle typed into a profile (`manual`) | **soft** — we recorded a claim, not a proof |
+| OAuth link confirmed by the platform | **pass** — the platform vouched |
+
+`PROVEN_METHODS` is a one-element tuple on purpose: adding to it is a decision
+about fraud exposure, not a config tweak.
+
+Linking proves *identity*. It does not unlock media. TikTok Login Kit works on
+ordinary personal accounts; Instagram OAuth covers Business/Creator accounts
+only, and even a linked Instagram exposes posts and reels through `/me/media`
+— **never stories**.
+
+## Screenshots are not evidence of time
+
+EXIF timestamps are ASCII text inside a file the claimant hands us. Measured:
+a real phone photo's `2026:06:08 23:55:38` was rewritten to an arbitrary date
+in twelve lines of Python with no library and no tooling — the string is
+fixed-width and in-place, so forging it is a search-and-replace.
+
+So EXIF may be *read* as a weak signal (missing, inconsistent, or contradicting
+the claim are all worth logging) but it can never gate a payout. Screenshot
+evidence stays what the spec says it is: tier 1-2 only, capped per diner, and
+flagged unverified in the venue's library.
+
 ## Not built
 
 - Instagram anything. Its pasted link cannot satisfy the window rule, so it is

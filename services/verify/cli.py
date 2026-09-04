@@ -22,6 +22,8 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from services.intake.store import IntakeStore                      # noqa: E402
+from services.verify.accounts import (AccountStore, METHOD_MANUAL,  # noqa: E402
+                                      METHOD_OAUTH)
 from services.verify.claims import (ClaimStore, process_claim,     # noqa: E402
                                     run_rechecks)
 from services.verify.links import (LinkError, fetch as fetch_post,  # noqa: E402
@@ -33,8 +35,8 @@ def cmd_claim(args) -> int:
     payload = process_claim(
         args.url, submitter_id=args.submitter, handle_on_file=args.handle,
         tier=args.tier, submission_id=args.submission,
-        connected=args.connected,
-        intake=IntakeStore(args.intake_db), store=ClaimStore(args.db))
+        intake=IntakeStore(args.intake_db), store=ClaimStore(args.db),
+        accounts=AccountStore(args.accounts_db))
     print(json.dumps(payload, indent=2))
     return 0 if payload["verdict"] != "reject" else 1
 
@@ -76,6 +78,21 @@ def cmd_stats(args) -> int:
     return 0
 
 
+def cmd_link(args) -> int:
+    store = AccountStore(args.accounts_db)
+    row = store.link(args.submitter, args.platform, args.handle,
+                     method=METHOD_OAUTH if args.oauth else METHOD_MANUAL)
+    print(json.dumps(row.to_dict(), indent=2))
+    return 0
+
+
+def cmd_accounts(args) -> int:
+    store = AccountStore(args.accounts_db)
+    print(json.dumps([a.to_dict() for a in store.for_submitter(args.submitter)],
+                     indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="verify")
     ap.add_argument("--db", default="data/claims.db")
@@ -88,9 +105,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="the platform handle on file for this diner")
     c.add_argument("--tier", type=int, default=1, choices=[1, 2, 3, 4])
     c.add_argument("--submission", help="screening id to match against")
-    c.add_argument("--connected", action="store_true",
-                   help="ownership is enforced by a connected account")
     c.add_argument("--intake-db", default="data/intake.db")
+    c.add_argument("--accounts-db", default="data/accounts.db")
     c.set_defaults(func=cmd_claim)
 
     i = sub.add_parser("inspect", help="resolve a link and show what the platform returns")
@@ -107,6 +123,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("stats", help="claim totals")
     s.set_defaults(func=cmd_stats)
+
+    la = sub.add_parser("link", help="link a platform account to a diner")
+    la.add_argument("--submitter", required=True)
+    la.add_argument("--platform", required=True, choices=["tiktok", "youtube", "instagram"])
+    la.add_argument("--handle", required=True)
+    la.add_argument("--oauth", action="store_true",
+                    help="the platform confirmed this link (OAuth callback only)")
+    la.add_argument("--accounts-db", default="data/accounts.db")
+    la.set_defaults(func=cmd_link)
+
+    ls = sub.add_parser("accounts", help="linked accounts for a diner")
+    ls.add_argument("--submitter", required=True)
+    ls.add_argument("--accounts-db", default="data/accounts.db")
+    ls.set_defaults(func=cmd_accounts)
     return ap
 
 

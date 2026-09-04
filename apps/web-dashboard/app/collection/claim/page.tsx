@@ -37,6 +37,7 @@ type Claim = {
   soft_passes?: string[];
   diner_message?: string;
   screened?: boolean;
+  ownership_proof?: { connected: boolean; reason: string };
   claim_id?: string;
   duplicate_of?: string;
   error?: string;
@@ -80,7 +81,6 @@ export default function ClaimPage() {
   const [submitter, setSubmitter] = React.useState("");
   const [handle, setHandle] = React.useState("");
   const [tier, setTier] = React.useState(2);
-  const [connected, setConnected] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [claim, setClaim] = React.useState<Claim | null>(null);
   const [staff, setStaff] = React.useState(false);
@@ -95,7 +95,7 @@ export default function ClaimPage() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ url: url.trim(), submitter: submitter.trim(),
-                               handle: handle.trim(), tier, connected }),
+                               handle: handle.trim(), tier }),
       });
       setClaim(await res.json());
     } catch (err) {
@@ -145,12 +145,6 @@ export default function ClaimPage() {
             <span style={{ fontSize: 11.5, color: "var(--text-muted)", lineHeight: 1.5 }}>
               Higher tiers hold anything that isn&apos;t fully proven, rather than paying it out.
             </span>
-          </label>
-
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
-            <input type="checkbox" checked={connected}
-              onChange={(e) => setConnected(e.target.checked)} />
-            <span>Account connected via TikTok Login</span>
           </label>
 
           <div style={{ display: "flex", gap: 10 }}>
@@ -266,6 +260,8 @@ export default function ClaimPage() {
                     <div>soft passes <code>{claim.soft_passes.join(", ")}</code></div>
                   ) : null}
                   <div>screened in-app <code>{String(claim?.screened)}</code></div>
+                  <div>ownership <code>{claim?.ownership_proof?.connected ? "proven" : "asserted"}</code>
+                    {" — "}{claim?.ownership_proof?.reason}</div>
                   {claim?.claim_id && <div>claim <code>{claim.claim_id}</code></div>}
                   {claim?.duplicate_of && <div>duplicate of <code>{claim.duplicate_of}</code></div>}
                 </div>
