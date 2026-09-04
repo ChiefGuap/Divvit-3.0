@@ -8,6 +8,7 @@ import React from "react";
 import { Icon } from "@/lib/icons";
 import { EASE, QuietButton, Segmented, fadeUp } from "@/lib/ui";
 import { compactCount } from "@/lib/format";
+import { NotBuiltYet } from "@/components/EmptyState";
 import type { LeaderboardCreator } from "@/lib/queries";
 
 const GRID = "22px 2.2fr 1fr 0.9fr 0.8fr 0.9fr 1fr";
@@ -203,10 +204,23 @@ export default function CreatorsView({ creators, videoTotal }: {
         })}
 
         {!shown.length && (
-          <div style={{ padding: "28px 10px", textAlign: "center", fontSize: 13,
-                        color: "var(--text-muted)" }}>
-            No creators in this band yet.
-          </div>
+          creators.length === 0 ? (
+            <NotBuiltYet
+              icon="users"
+              title="No TikTok or Instagram creators yet"
+              reason="Creators are ranked on the videos we have found for them, and
+                      only TikTok and Instagram count. Everything harvested so far
+                      is YouTube, so no creator has a qualifying video — the people
+                      are in the database, their reach is simply on the wrong
+                      platform."
+              table="discovered_videos · 0 tiktok/instagram"
+            />
+          ) : (
+            <div style={{ padding: "28px 10px", textAlign: "center", fontSize: 13,
+                          color: "var(--text-muted)" }}>
+              No creators in this band yet.
+            </div>
+          )
         )}
       </div>
 

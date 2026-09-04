@@ -214,7 +214,8 @@ export async function coverage() {
     // against 265 active venues — a figure that cannot be true and read as
     // one on the page. Distinct business_id is the number actually meant.
     supabase.from("brand_health_snapshots").select("business_id").eq("rankable", true).limit(5000),
-    supabase.from("discovered_videos").select("id", { count: "exact", head: true }),
+    supabase.from("discovered_videos").select("id", { count: "exact", head: true })
+      .in("platform", FEED_PLATFORMS as unknown as string[]),
   ]);
 
   const distinct = new Set(
@@ -327,14 +328,15 @@ export async function creatorLeaderboard(limit = 1000): Promise<LeaderboardCreat
   const supabase = await db();
   const { data, error } = await supabase
     .from("creators")
-    .select("id, display_name, handle, platform, follower_count, discovered_videos(view_count, published_at)")
+    .select("id, display_name, handle, platform, follower_count, discovered_videos(view_count, published_at, platform)")
     .limit(limit);
 
   if (error) throw new Error(`creatorLeaderboard: ${error.message}`);
 
   // supabase-js cannot infer an embedded relationship without generated
   // database types, so the row shape is stated here rather than inferred.
-  type Embedded = { view_count: number | null; published_at: string | null };
+  type Embedded = { view_count: number | null; published_at: string | null;
+                    platform: string | null };
   type Row = {
     id: string;
     display_name: string | null;
@@ -345,7 +347,12 @@ export async function creatorLeaderboard(limit = 1000): Promise<LeaderboardCreat
   };
 
   const rows: LeaderboardCreator[] = ((data ?? []) as unknown as Row[]).map((row) => {
-    const videos = row.discovered_videos ?? [];
+    // Filtered here rather than in the select: an embedded filter would drop
+    // the creator row entirely, and a creator with only YouTube videos should
+    // disappear from the leaderboard, not appear with a phantom zero.
+    const videos = (row.discovered_videos ?? []).filter(
+      (v) => v.platform !== null && (FEED_PLATFORMS as readonly string[]).includes(v.platform),
+    );
     const measured = videos.filter((v) => typeof v.view_count === "number");
     const dates = videos.map((v) => v.published_at).filter(Boolean) as string[];
 
@@ -391,6 +398,23 @@ export async function recentVideos(limit = 24): Promise<VideoRow[]> {
   return data ?? [];
 }
 
+/**
+ * Platforms the product actually cares about.
+ *
+ * YouTube is excluded deliberately. The harvest reached it because it is the
+ * only source that yields to keyless tooling, but a five-minute segment from a
+ * news channel is not the customer-filmed vertical video this product is
+ * about, and showing it implies a supply that does not exist.
+ *
+ * Enforced in the query rather than the view, so a new page cannot
+ * accidentally surface YouTube by forgetting to filter.
+ *
+ * Consequence, stated plainly: the corpus is 387 YouTube rows and nothing
+ * else, so every feed filtered through this is empty until TikTok or
+ * Instagram harvesting exists.
+ */
+export const FEED_PLATFORMS = ["tiktok", "instagram"] as const;
+
 /** Videos for the Discover feed, newest first, with the venue they are about. */
 export type FeedVideo = VideoRow & {
   thumbnail_url: string | null;
@@ -404,6 +428,7 @@ export async function discoverFeed(limit = 60): Promise<FeedVideo[]> {
   const { data, error } = await supabase
     .from("discovered_videos")
     .select("id, business_id, canonical_id, platform, url, title, view_count, like_count, comment_count, published_at, creator_handle, creator_display_name, thumbnail_url, duration_seconds, businesses(name, city)")
+    .in("platform", FEED_PLATFORMS as unknown as string[])
     .order("published_at", { ascending: false, nullsFirst: false })
     .limit(limit);
 
@@ -432,6 +457,7 @@ export async function platformMix(): Promise<{ platform: string; count: number }
   const { data, error } = await supabase
     .from("discovered_videos")
     .select("platform")
+    .in("platform", FEED_PLATFORMS as unknown as string[])
     .limit(5000);
 
   if (error) throw new Error(`platformMix: ${error.message}`);
@@ -622,5 +648,11 @@ export async function activityEvents(limit = 12): Promise<ActivityEvent[]> {
 
 /** Total discovered videos. Split out so pages never build their own client. */
 export async function videoCount(): Promise<number> {
-  return countOf("discovered_videos");
+  const supabase = await db();
+  const { count, error } = await supabase
+    .from("discovered_videos")
+    .select("id", { count: "exact", head: true })
+    .in("platform", FEED_PLATFORMS as unknown as string[]);
+  if (error) throw new Error(`videoCount: ${error.message}`);
+  return count ?? 0;
 }

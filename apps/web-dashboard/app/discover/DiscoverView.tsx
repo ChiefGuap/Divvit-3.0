@@ -12,6 +12,7 @@ import React from "react";
 import { Icon, type IconName } from "@/lib/icons";
 import { EASE, QuietButton, Segmented, fadeUp, useCountUp } from "@/lib/ui";
 import { compactCount } from "@/lib/format";
+import { NotBuiltYet } from "@/components/EmptyState";
 import type { FeedVideo } from "@/lib/queries";
 
 const PLATFORM: Record<string, { label: string; icon: IconName; fg: string; bg: string }> = {
@@ -185,10 +186,16 @@ export default function DiscoverView({ videos, mix, venueCount, videoTotal }: {
       </div>
 
       {!shown.length && (
-        <div style={{ padding: "40px 10px", textAlign: "center", fontSize: 13,
-                      color: "var(--text-muted)" }}>
-          Nothing discovered on this platform yet.
-        </div>
+        <NotBuiltYet
+          icon="radar"
+          title="Nothing found on TikTok or Instagram"
+          reason="Discover shows TikTok and Instagram only. The harvest so far is
+                  entirely YouTube, which is excluded deliberately — it is the
+                  one source keyless tooling reaches, and a news segment is not
+                  the customer-filmed video this product is about. TikTok and
+                  Instagram do not expose discovery without keyed access."
+          table="discovered_videos · 0 tiktok/instagram"
+        />
       )}
 
       <div style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "11px 14px",

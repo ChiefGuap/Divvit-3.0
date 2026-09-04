@@ -136,6 +136,18 @@ export default function HomeView({ venue, videos, counts, submissionCount }: {
                                           color: "var(--purple-deep)", fontWeight: 600,
                                           textDecoration: "none" }}>See all →</Link>
         </div>
+        {videos.length === 0 ? (
+          <NotBuiltYet
+            icon="radar"
+            title="No TikTok or Instagram videos yet"
+            reason="The feed shows TikTok and Instagram only. Everything harvested
+                    so far is YouTube, which is excluded on purpose — a news
+                    segment is not the customer-filmed vertical video this is
+                    about. Neither platform exposes discovery without keyed
+                    access, so this stays empty until that access exists."
+            table="discovered_videos · 0 tiktok/instagram"
+          />
+        ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px,1fr))",
                       gap: 12 }}>
           {videos.slice(0, 8).map((v) => (
@@ -168,6 +180,7 @@ export default function HomeView({ venue, videos, counts, submissionCount }: {
             </a>
           ))}
         </div>
+        )}
       </div>
     </>
   );
