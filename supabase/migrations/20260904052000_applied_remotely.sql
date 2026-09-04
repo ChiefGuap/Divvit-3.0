@@ -1,0 +1,16 @@
+-- Placeholder for a migration applied directly to the remote project on
+-- 2026-09-04 05:20 UTC that has no local source file.
+--
+-- It was not created by this working tree. The remote history records it as
+-- applied, and inspection afterwards found the data intact — businesses 359,
+-- brand_health_snapshots 724, creators 351, discovered_videos 387,
+-- venue_signals 359, all matching the previous push, with no added or removed
+-- columns on `businesses`.
+--
+-- This file exists only so local and remote migration histories line up. It is
+-- deliberately EMPTY rather than a guess at what ran: `supabase migration
+-- repair --status reverted` would rewrite history for a change nobody here can
+-- describe, and writing invented SQL would be worse — the next person would
+-- read it as a record of what happened.
+--
+-- Whoever applied it should replace this with the real statements.

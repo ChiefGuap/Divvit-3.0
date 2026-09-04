@@ -656,3 +656,53 @@ export async function videoCount(): Promise<number> {
   if (error) throw new Error(`videoCount: ${error.message}`);
   return count ?? 0;
 }
+
+/* ------------------------------------------------------------- onboarding */
+
+export type VenueSearchResult = {
+  id: string;
+  name: string;
+  city: string | null;
+  address: string | null;
+  cuisine: string | null;
+  website: string | null;
+  instagram: string | null;
+  tiktok: string | null;
+  organic_brand_health_score: number | null;
+  is_partner: boolean | null;
+};
+
+/**
+ * Find a venue in the roster by name, for onboarding.
+ *
+ * This is the step the rest of the flow hangs off: a cafe signing up should
+ * find itself already there, with its brand health computed, rather than
+ * typing its own details into an empty form. 1,869 venues are seeded, so for
+ * most of Orange County that lookup succeeds.
+ *
+ * Matching is a case-insensitive contains rather than full text search:
+ * someone typing "coffee dose" should find "Coffee Dose", and Postgres FTS
+ * would need an index and a tsquery for no gain at this size.
+ */
+export async function searchVenues(query: string, limit = 8): Promise<VenueSearchResult[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const supabase = await db();
+  const { data, error } = await supabase
+    .from("businesses")
+    .select("id, name, city, address, cuisine, website, instagram, tiktok, organic_brand_health_score, is_partner")
+    .ilike("name", `%${q}%`)
+    .eq("lifecycle_status", "active")
+    // Scored venues first: a cafe that finds itself WITH a score sees the
+    // point of the product immediately.
+    .order("organic_brand_health_score", { ascending: false, nullsFirst: false })
+    .limit(limit);
+
+  if (error) throw new Error(`searchVenues: ${error.message}`);
+  return (data ?? []) as VenueSearchResult[];
+}
+
+/** One venue's prefilled profile for the claim step. */
+export async function venueForClaim(id: string): Promise<RankedVenue | null> {
+  return venueById(id);
+}

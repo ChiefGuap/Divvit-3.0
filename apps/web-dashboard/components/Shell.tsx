@@ -80,6 +80,11 @@ export function Shell({ children, events = [] }:
   const pathname = usePathname() || "/";
   const router = useRouter();
 
+  // Onboarding renders outside the shell. The sidebar, venue switcher and
+  // activity strip are all signed-in surfaces; showing them around a signup
+  // would present a nav that half-works to someone with no account yet.
+  const bare = pathname.startsWith("/onboarding");
+
   const [collapsed, setCollapsed] = React.useState(false);
   const [hovering, setHovering] = React.useState(false);
   const [menuOpen, setMenuOpen] = React.useState(false);
@@ -168,6 +173,10 @@ export function Shell({ children, events = [] }:
     setResults(scored);
     setSearchOpen(true);
   }, [query]);
+
+  // After every hook, so the hook order is identical on both branches — an
+  // early return above them would change it between routes and break React.
+  if (bare) return <>{children}</>;
 
   const meta = PAGE_META[pathname] ?? PAGE_META["/"];
   const sidebarWidth = shut ? 68 : 250;
