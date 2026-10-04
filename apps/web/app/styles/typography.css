@@ -1,0 +1,47 @@
+/* ============================================================
+   Divvit — Typography tokens
+   Outfit for everything UI/marketing; Alatsi for brand lockups.
+   ============================================================ */
+
+:root {
+  /* Families */
+  --font-sans: "Outfit", "Outfit Fallback", system-ui, -apple-system,
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-brand: "Alatsi", "Outfit", system-ui, sans-serif; /* logo / display badge */
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Weights (Outfit variable: 100–900) */
+  --fw-light: 300;       /* @kind other */
+  --fw-regular: 400;     /* @kind other */
+  --fw-medium: 500;      /* @kind other */
+  --fw-semibold: 600;    /* @kind other */
+  --fw-bold: 700;        /* @kind other */
+  --fw-extrabold: 800;   /* @kind other */
+
+  /* Type scale — px-based, 1.250 major-third-ish, tuned for product UI */
+  --fs-display-xl: 64px;
+  --fs-display-l:  52px;
+  --fs-display-m:  40px;
+  --fs-h1: 32px;
+  --fs-h2: 26px;
+  --fs-h3: 21px;
+  --fs-h4: 18px;
+  --fs-body-lg: 17px;
+  --fs-body: 15px;
+  --fs-body-sm: 13px;
+  --fs-caption: 12px;
+  --fs-micro: 11px;
+
+  /* Line heights */
+  --lh-tight: 1.05;      /* @kind other */
+  --lh-snug: 1.2;        /* @kind other */
+  --lh-default: 1.45;    /* @kind other */
+  --lh-relaxed: 1.6;     /* @kind other */
+
+  /* Letter spacing */
+  --ls-tighter: -0.03em; /* @kind other */
+  --ls-tight: -0.015em;  /* @kind other */
+  --ls-normal: 0;        /* @kind other */
+  --ls-wide: 0.02em;     /* @kind other */
+  --ls-caps: 0.08em;     /* @kind other */
+}

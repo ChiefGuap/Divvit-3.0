@@ -1,0 +1,32 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "divvit.app (marketing site) and marketplace.divvit.app, served by one Next.js app with host-based routing",
+  "scripts": {
+    "dev": "next dev -p 3200",
+    "build": "next build",
+    "start": "next start -p 3200",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.4",
+    "@supabase/supabase-js": "^2.112.3",
+    "gsap": "^3.12.5",
+    "maplibre-gl": "^5.6.0",
+    "next": "^15.4.6",
+    "qrcode": "^1.5.4",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.2.1",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^19.1.9",
+    "@types/react-dom": "^19.1.7",
+    "@types/three": "^0.170.0",
+    "typescript": "^5.9.2"
+  }
+}

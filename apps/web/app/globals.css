@@ -1,0 +1,61 @@
+/* Global base. Divvit design tokens come from ./styles (copied as-is from the
+   design system bundle in divvit_home_no_photos/_ds). */
+
+@font-face {
+  font-family: "Outfit";
+  src: url("/fonts/Outfit-Variable.ttf") format("truetype-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* per-startup accent on the landing page animates between colours */
+@property --accent { syntax: "<color>"; inherits: true; initial-value: #8c52ff; }
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+html { background: #ffffff; }
+body {
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  /* Divvit marketing page wash (Divvit Home.dc.html root) */
+  background: radial-gradient(58% 48% at 12% -4%, #e4d8ff, transparent 62%),
+              radial-gradient(52% 46% at 90% 22%, #efe6ff, transparent 64%),
+              radial-gradient(48% 42% at 62% 96%, #ece3ff, transparent 62%),
+              #fbfaff;
+  background-attachment: fixed;
+}
+a { color: inherit; text-decoration: none; }
+button, input, select, textarea { font-family: inherit; }
+::selection { background: rgba(140, 82, 255, 0.2); }
+
+/* ambient hue blobs (Divvit Home.dc.html #divvit-hues) */
+#divvit-hues { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+#divvit-hues > div { position: absolute; border-radius: 50%; will-change: transform; }
+
+/* buttons shared by both sites (Divvit Home.dc.html .divvit-plainsm) */
+.divvit-plainsm { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 42px; padding: 0 20px; border: none; border-radius: 99px; background: var(--brand-primary); color: #fff !important;
+  font-size: 14.5px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; text-decoration: none; cursor: pointer;
+  box-shadow: 0 6px 18px rgba(140,82,255,0.35); transition: transform .3s var(--ease-out), box-shadow .3s var(--ease-out); }
+.divvit-plainsm::before { content: ""; position: absolute; inset: 0; background: linear-gradient(120deg, var(--purple-600), var(--purple-800));
+  transform: scaleX(0); transform-origin: left center; transition: transform .38s cubic-bezier(.22,1,.36,1); z-index: 0; }
+.divvit-plainsm > * { position: relative; z-index: 1; }
+.divvit-plainsm:hover { transform: translateY(-1px); box-shadow: 0 12px 30px rgba(99,70,205,0.45); }
+.divvit-plainsm:hover::before { transform: scaleX(1); }
+.divvit-plainsm:disabled { opacity: .55; cursor: not-allowed; transform: none; box-shadow: none; }
+.divvit-plainsm:disabled::before { transform: scaleX(0); }
+.divvit-plainsm.lg { height: 52px; padding: 0 28px; font-size: 16px; font-weight: 700; }
+
+.divvit-ghost { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 42px; padding: 0 20px; border-radius: 99px;
+  background: rgba(255,255,255,.72); border: 1px solid rgba(140,82,255,.18); color: var(--text-primary); font-size: 14.5px; font-weight: 600;
+  letter-spacing: -0.01em; cursor: pointer; white-space: nowrap; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  transition: background .2s var(--ease-out), border-color .2s var(--ease-out), color .2s var(--ease-out); }
+.divvit-ghost:hover { background: #fff; border-color: rgba(140,82,255,.4); color: var(--brand-primary); }
+.divvit-ghost.lg { height: 52px; padding: 0 26px; font-size: 16px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

@@ -1,0 +1,106 @@
+/* ============================================================
+   Divvit — Color tokens
+   Base palette + semantic aliases.
+   Brand anchors: Primary #8c52ff, Secondary #6346cd,
+   Black #111827, White #ffffff.
+   ============================================================ */
+
+:root {
+  /* ---- Brand purple scale ---- */
+  --purple-50:  #f4eeff;
+  --purple-100: #e6d9ff;
+  --purple-200: #cfb3ff;
+  --purple-300: #b48aff;
+  --purple-400: #9f6dff;
+  --purple-500: #8c52ff;  /* PRIMARY */
+  --purple-600: #7a3ce8;
+  --purple-650: #6346cd;  /* SECONDARY — previous primary */
+  --purple-700: #4b29b4;
+  --purple-800: #3a2089;
+  --purple-900: #281659;
+  --purple-950: #170c33;
+
+  /* ---- Neutral / ink scale (tuned toward the brand black #111827) ---- */
+  --neutral-0:   #ffffff;
+  --neutral-50:  #f7f8fa;
+  --neutral-100: #eef0f4;
+  --neutral-200: #e1e4ea;
+  --neutral-300: #cbd0da;
+  --neutral-400: #9aa1b1;
+  --neutral-500: #6b7283;
+  --neutral-600: #4b5163;
+  --neutral-700: #343a4a;
+  --neutral-800: #1f2533;
+  --neutral-900: #111827;     /* BRAND BLACK */
+  --neutral-950: #0a0e1a;
+
+  /* ---- Accent: Gold (rewards, points, streaks) — warm marigold ---- */
+  --mango-50:  #f8f1e2;
+  --mango-100: #f0ddb8;
+  --mango-300: #e2bd7b;
+  --mango-400: #e0a64c;
+  --mango-500: #e09a2e;   /* points / rewards accent */
+  --mango-600: #a26b1d;
+
+  /* ---- Accent: Sage (savings, success, "you saved") — desaturated emerald ---- */
+  --mint-50:  #e9f0ec;
+  --mint-100: #cbe0d6;
+  --mint-300: #84b9a2;
+  --mint-500: #3a8167;    /* savings / success */
+  --mint-600: #2a614d;
+
+  /* ---- Semantic status — deeper, purple-leaning ---- */
+  --red-50:   #f6ebed;
+  --red-500:  #b54655;   /* muted berry-red */
+  --red-600:  #94333f;
+  --amber-500: #e09a2e;
+  --green-500: #3a8167;
+  --blue-500:  #5360b8;   /* indigo, pulled toward brand */
+
+  /* ============================================================
+     SEMANTIC ALIASES — reference these in components, not base.
+     ============================================================ */
+
+  /* Brand */
+  --brand-primary:        var(--purple-500);
+  --brand-primary-hover:  var(--purple-600);
+  --brand-primary-press:  var(--purple-650);
+  --brand-secondary:      var(--purple-650);
+  --brand-on-primary:     var(--neutral-0);
+  --brand-subtle:         var(--purple-50);
+  --brand-subtle-border:  var(--purple-100);
+
+  /* Surfaces */
+  --surface-page:    var(--neutral-50);
+  --surface-card:    var(--neutral-0);
+  --surface-raised:  var(--neutral-0);
+  --surface-sunken:  var(--neutral-100);
+  --surface-inverse: var(--neutral-900);
+  --surface-brand:   var(--purple-500);
+
+  /* Text */
+  --text-primary:    var(--neutral-900);
+  --text-secondary:  var(--neutral-600);
+  --text-tertiary:   var(--neutral-500);
+  --text-disabled:   var(--neutral-400);
+  --text-inverse:    var(--neutral-0);
+  --text-brand:      var(--purple-600);
+  --text-on-brand:   var(--neutral-0);
+
+  /* Borders / dividers */
+  --border-subtle:   var(--neutral-200);
+  --border-default:  var(--neutral-300);
+  --border-strong:   var(--neutral-400);
+  --border-brand:    var(--purple-300);
+
+  /* Status */
+  --status-success-fg: var(--mint-600);
+  --status-success-bg: var(--mint-50);
+  --status-reward-fg:  var(--mango-600);
+  --status-reward-bg:  var(--mango-50);
+  --status-danger-fg:  var(--red-600);
+  --status-danger-bg:  var(--red-50);
+
+  /* Focus ring */
+  --focus-ring: 0 0 0 3px rgba(140, 82, 255, 0.35);
+}

@@ -1,0 +1,67 @@
+/* Divvit marketing header — ported from Divvit Home.dc.html (#divvit-header). */
+#divvit-header { position: fixed; top: 0; left: 0; right: 0; z-index: 100; height: 66px; max-width: 100%; margin: 0 auto; border-radius: 0;
+  transition: max-width .42s var(--ease-out), top .42s var(--ease-out), border-radius .42s var(--ease-out), box-shadow .42s var(--ease-out),
+              background .42s var(--ease-out), border-color .42s var(--ease-out);
+  background: rgba(253,253,252,0.62); backdrop-filter: blur(8px) saturate(1.15); -webkit-backdrop-filter: blur(8px) saturate(1.15);
+  border: 1px solid rgba(140,82,255,0.10); box-shadow: none; font-family: var(--font-sans); color: var(--text-primary); }
+/* scrolled: the header lifts into a floating "island" */
+#divvit-header.island { max-width: 1320px; top: 14px; border-radius: 22px; border-color: rgba(255,255,255,0.6);
+  backdrop-filter: blur(20px) saturate(1.5); -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.9) inset, 0 16px 44px rgba(58,32,137,0.22), 0 3px 10px rgba(58,32,137,0.10);
+  background: linear-gradient(180deg, rgba(255,255,255,0.8) 0%, rgba(244,238,255,0.68) 100%); }
+#divvit-header.island { left: 16px; right: 16px; }
+#divvit-header a { text-decoration: none; }
+#divvit-header nav a:hover, #divvit-header nav button:hover { color: var(--brand-primary) !important; text-decoration: none !important; }
+.dh-inner { max-width: 1680px; height: 100%; margin: 0 auto; padding: 0 clamp(24px, 3.4vw, 56px); display: flex; align-items: center; gap: clamp(10px, 1.6vw, 24px); }
+.dh-side { flex: 1 1 0; display: flex; align-items: center; }
+.dh-side.dh-right { justify-content: flex-end; gap: 20px; }
+.dh-logo { display: inline-flex; align-items: center; flex: 0 0 auto; }
+.dh-logo img { width: 104px; height: auto; flex: 0 0 auto; display: block; }
+.dh-nav { flex: 0 0 auto; display: flex; align-items: center; gap: clamp(6px, 1.7vw, 26px); }
+.dh-menu { position: relative; }
+#divvit-header .dh-link { display: inline-flex; align-items: center; gap: 5px; background: transparent; border: none; cursor: pointer;
+  font-family: var(--font-sans); font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--text-primary);
+  padding: 8px 10px; border-radius: 15px; transition: background .2s var(--ease-out), color .2s var(--ease-out), box-shadow .2s var(--ease-out); }
+#divvit-header .dh-link:hover, #divvit-header .dh-link.active { /* navGlass */
+  color: var(--brand-primary); background: linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(140,82,255,0.14) 100%);
+  backdrop-filter: blur(8px) saturate(1.4); -webkit-backdrop-filter: blur(8px) saturate(1.4);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -1px 1px rgba(140,82,255,0.18), 0 4px 14px rgba(140,82,255,0.22); }
+.dh-drop { position: fixed; top: 52px; left: 50%; transform: translateX(-50%); padding-top: 20px; z-index: 200; }
+.dh-panel-features { width: 880px; background: linear-gradient(180deg, #ffffff 0%, #f8f5ff 100%); border: 1px solid rgba(140,82,255,0.14); border-radius: 16px;
+  box-shadow: 0 24px 50px rgba(58,32,137,0.2), inset 0 1px 0 rgba(255,255,255,0.9); padding: 20px 18px; display: grid; grid-template-columns: 1fr 1fr 1.05fr; gap: 18px 22px; }
+.dh-colhead { font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-tertiary); padding: 0 12px 6px; }
+#divvit-header .dh-item { display: flex; gap: 12px; align-items: center; padding: 6px 12px; border-radius: 10px; color: var(--text-primary); }
+#divvit-header .dh-item:hover { background: rgba(140,82,255,0.10); }
+.dh-item svg { flex: 0 0 auto; }
+.dh-item-t { display: block; font-size: 15px; font-weight: 700; }
+.dh-item-s { display: block; font-size: 12.5px; color: var(--text-tertiary); margin-top: 1px; }
+.dh-feature { position: relative; border-radius: 14px; overflow: hidden; min-height: 240px; border: 1px solid rgba(255,255,255,0.6);
+  box-shadow: 0 18px 40px rgba(58,32,137,0.22), 0 4px 12px rgba(17,24,39,0.1);
+  background: radial-gradient(90% 70% at 30% 20%, #f4eeff, transparent 60%), linear-gradient(150deg, var(--purple-200), var(--purple-500) 70%, var(--purple-700)); }
+.dh-feature-scrim { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(17,24,39,0) 44%, rgba(26,15,46,0.6) 100%); }
+.dh-feature-cap { position: absolute; left: 16px; right: 16px; bottom: 14px; color: #fff; text-align: left; pointer-events: none; }
+.dh-feature-cap b { display: block; font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.dh-feature-cap span { display: block; font-size: 12.5px; font-weight: 600; opacity: 0.85; margin-top: 2px; }
+.dh-panel-res { width: 760px; background: #ffffff; border: 1px solid rgba(140,82,255,0.14); border-radius: 20px;
+  box-shadow: 0 24px 50px rgba(58,32,137,0.2), inset 0 1px 0 rgba(255,255,255,0.9); padding: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+#divvit-header .dh-team, #divvit-header .dh-team:hover { display: flex; flex-direction: column; justify-content: flex-end; min-height: 158px; padding: 20px; border-radius: 16px;
+  background: linear-gradient(150deg, var(--purple-500), var(--purple-700)); color: #fff !important; }
+.dh-team-t { display: block; font-size: 21px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.14; }
+.dh-team-cta { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 700; margin-top: 12px; }
+.dh-news { display: flex; flex-direction: column; padding: 20px 20px 20px 22px; border-radius: 16px; background: var(--neutral-50); border: 1px solid rgba(140,82,255,0.10); min-height: 158px; }
+.dh-news-h { font-size: 19px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 18px; }
+.dh-news-list { display: flex; flex-direction: column; gap: 14px; }
+#divvit-header .dh-news-list a { font-size: 15px; font-weight: 600; color: var(--text-secondary); }
+#divvit-header .dh-contact { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: auto; height: 46px; border-radius: 99px;
+  background: #ffffff; border: 1px solid rgba(140,82,255,0.16); color: var(--text-primary); font-size: 15px; font-weight: 700; }
+.divvit-restile { text-decoration: none; transition: transform .55s cubic-bezier(.16,.9,.24,1), box-shadow .55s var(--ease-out), filter .55s var(--ease-out); }
+.divvit-restile:hover { transform: translateY(-1.5px); box-shadow: 0 10px 30px rgba(58,32,137,0.13); filter: saturate(1.03); }
+.divvit-restile:active { transform: translateY(0) scale(0.995); transition-duration: .12s; }
+.divvit-restile .divvit-restile-arrow { transition: transform .5s cubic-bezier(.16,.9,.24,1); }
+.divvit-restile:hover .divvit-restile-arrow { transform: translateX(4px); }
+#divvit-header .divvit-login { flex: 0 0 auto; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--text-secondary); white-space: nowrap;
+  padding: 8px 10px; border-radius: 15px; transition: color .25s var(--ease-out); }
+#divvit-header .divvit-login:hover { color: var(--brand-primary) !important; }
+/* the prototype is desktop-only; on narrow screens keep the wordmark + main button */
+@media (max-width: 980px) { .dh-nav { display: none; } }
+@media (max-width: 520px) { #divvit-header .divvit-login { display: none; } }
