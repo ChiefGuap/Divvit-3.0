@@ -16,6 +16,9 @@ type Row = {
   review_note: string | null; reviewed_at: string | null; paid_at: string | null; created_at: string;
   startup_name: string; website: string | null; category: string; hq: string | null; description: string | null; linkedin_url: string | null;
   owner_email: string; owner_name: string | null;
+  startup_id: string; domain: string | null; confirmed_at: string | null; confirmed_via: "email" | "work_email" | "team" | null;
+  confirmed_email: string | null; confirm_note: string | null;
+  same_domain: { name: string; email: string; confirmed: boolean }[];
   cafes: { name: string; neighborhood: string | null; city: string; is_demo: boolean; status: string; sleeves: number; price_cents: number; payout_cents: number }[];
 };
 
@@ -34,6 +37,7 @@ export function AdminCampaigns() {
   const [price, setPrice] = React.useState<Record<string, string>>({});
   const [note, setNote] = React.useState<Record<string, string>>({});
   const [busy, setBusy] = React.useState<string | null>(null);
+  const [callNote, setCallNote] = React.useState<Record<string, string>>({});
   const [error, setError] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
@@ -53,6 +57,17 @@ export function AdminCampaigns() {
     await load();
     setBusy(null);
   }
+
+  // the team spoke to the founder and is satisfied it's their company
+  async function confirmCompany(r: Row) {
+    setBusy(r.id); setError(null);
+    const { error } = await supabase.rpc("mp_admin_confirm_company", { p_startup: r.startup_id, p_note: callNote[r.id]?.trim() || null });
+    if (error) setError(error.message);
+    await load();
+    setBusy(null);
+  }
+  const confirmedBy = (r: Row) => r.confirmed_via === "team" ? `by the team${r.confirm_note ? ` (${r.confirm_note})` : ""}`
+    : `${r.confirmed_via === "work_email" ? "work email" : "sign-in email"} ${r.confirmed_email ?? ""}`;
 
   if (!rows) return error ? <div className="mp-error">{error}</div> : <p className="mp-note">Loading…</p>;
   const shown = rows.filter((r) => IN[tab].includes(r.status));
@@ -92,6 +107,13 @@ export function AdminCampaigns() {
                     <span className="k">Startup</span>
                     <b>{r.startup_name}</b>
                     <span>{r.owner_name || "—"} · <a href={`mailto:${r.owner_email}`}>{r.owner_email}</a></span>
+                    <span className={`adm-company${r.confirmed_at ? " ok" : ""}`}>{r.confirmed_at ? `Confirmed company · ${confirmedBy(r)}` : "Company not confirmed"}</span>
+                    {!r.confirmed_at && (
+                      <small>{r.domain ? `Their email isn't at ${r.domain}.` : "They haven't given a website."} Confirm on your call that they run {r.startup_name}, or ask them to confirm a work email from their dashboard.</small>
+                    )}
+                    {r.same_domain.length > 0 && (
+                      <small className="adm-warn">Also on {r.domain}: {r.same_domain.map((o) => `${o.name} (${o.email}${o.confirmed ? ", confirmed" : ""})`).join(", ")}</small>
+                    )}
                     <small>{[categoryLabel(r.category), r.hq].filter(Boolean).join(" · ")}</small>
                     {r.description && <small>{r.description}</small>}
                     {(r.website || r.linkedin_url) && (
@@ -124,6 +146,13 @@ export function AdminCampaigns() {
 
                 {["submitted", "approved"].includes(r.status) ? (
                   <div className="adm-decide">
+                    {!r.confirmed_at && (
+                      <div className="adm-confirm">
+                        <input className="mp-input" value={callNote[r.id] ?? ""} placeholder="How you confirmed it, e.g. spoke to the founder on the call"
+                          onChange={(e) => setCallNote((x) => ({ ...x, [r.id]: e.target.value }))} />
+                        <button className="mp-btn" disabled={busy === r.id} onClick={() => confirmCompany(r)}>Confirmed on a call</button>
+                      </div>
+                    )}
                     {samples > 0 && (
                       <div className="mp-found"><span>{real === 0
                         ? "Every café here is a sample café, so this campaign can't run. Decline it with a note (for example, which real cafés nearby could run it), or wait until some join."
@@ -139,7 +168,7 @@ export function AdminCampaigns() {
                         onChange={(e) => setNote((x) => ({ ...x, [r.id]: e.target.value }))} />
                     </label>
                     <div className="mp-row-actions">
-                      <button className="mp-btn primary" disabled={busy === r.id || real === 0} onClick={() => review(r, true)}>
+                      <button className="mp-btn primary" disabled={busy === r.id || real === 0 || !r.confirmed_at} title={r.confirmed_at ? undefined : "Confirm the company first"} onClick={() => review(r, true)}>
                         {r.status === "approved" ? "Update and ask again" : "Approve and ask for payment"}
                       </button>
                       <button className="mp-btn" disabled={busy === r.id} onClick={() => review(r, false)}>Decline</button>

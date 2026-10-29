@@ -25,7 +25,7 @@ type Pending = {
   cafe: { id: string; name: string; address: string | null; neighborhood: string | null; city: string; website: string | null; osm_ref: string | null;
     email: string; name_of_owner: string | null; method: "phone" | "review" | "website" | null } | null;
 };
-type Mail = { to: string[]; subject: string; text: string; html: string; replyTo?: string };
+export type Mail = { to: string[]; subject: string; text: string; html: string; replyTo?: string };
 
 const money = (c: number) => (c / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
 const esc = (s: string) => s.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]!);
@@ -35,7 +35,7 @@ const when = (k: NonNullable<Pending["campaign"]>) => (k.start_date
 const first = (name: string | null) => (name || "").split(" ")[0] || "there";
 
 /** a plain email: a heading, a few lines, an optional facts table and a button */
-function compose({ heading, lines, facts = [], list, button, footer }: {
+export function compose({ heading, lines, facts = [], list, button, footer }: {
   heading: string; lines: string[]; facts?: [string, string][]; list?: { title: string; items: string[] };
   button?: { label: string; href: string }; footer?: string;
 }) {
@@ -144,6 +144,23 @@ function message(p: Pending, team: string[]): Mail | null {
 }
 
 export type SendResult = { sent: number; pending: number; configured: boolean };
+
+export const emailConfigured = () => Boolean(process.env.RESEND_API_KEY);
+
+/** Send one email now through Resend (for links that can't wait for the outbox). */
+export async function sendEmail(m: Mail) {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) throw new Error("Email isn't set up (RESEND_API_KEY)");
+  const team = (process.env.DIVVIT_TEAM_EMAIL ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  const r = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from: process.env.DIVVIT_FROM_EMAIL || "Divvit <onboarding@resend.dev>", to: m.to, subject: m.subject,
+      text: m.text, html: m.html, reply_to: m.replyTo ?? team[0] }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!r.ok) throw new Error(`Resend ${r.status}: ${(await r.text()).slice(0, 200)}`);
+}
 
 export async function sendPendingEmails(): Promise<SendResult> {
   const { db, secret } = serverDb();

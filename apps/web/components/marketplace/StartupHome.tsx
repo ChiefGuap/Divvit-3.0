@@ -18,6 +18,7 @@ import { CafeMarket } from "./dashboard/CafeMarket";
 import { SetupGuide, type GuideStep } from "./SetupGuide";
 import { Notices } from "./Notices";
 import { CampaignMetrics, CampaignTimeline } from "./CampaignProgress";
+import { CompanyConfirm, type CompanyStatus } from "./CompanyConfirm";
 import { cafeAccepts, categoryLabel } from "@/lib/marketplace/categories";
 import { eligibleCafes, type Area } from "@/lib/marketplace/network";
 import { proxied } from "@/lib/marketplace/images";
@@ -51,6 +52,9 @@ export function StartupHome() {
   const cafes = useNetwork();
   const [startup, setStartup] = React.useState<Startup | null>(null);
   const [list, setList] = React.useState<Campaign[] | null>(null);
+  const [company, setCompany] = React.useState<CompanyStatus | null>(null);
+  // back from the work-email link: /home?company=confirmed | expired
+  const [linkResult, setLinkResult] = React.useState<"confirmed" | "expired" | null>(null);
   const [view, setView] = React.useState<View>("find");
   const [areas, setAreas] = React.useState<Area[]>([]);
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
@@ -72,7 +76,16 @@ export function StartupHome() {
       });
     supabase.rpc("mp_my_campaigns").then(({ data }) => setList((data as Campaign[]) ?? []));
     supabase.rpc("mp_is_admin").then(({ data }) => setAdmin(data === true));
+    supabase.rpc("mp_company_status").then(({ data }) => setCompany(data as CompanyStatus | null));
   }, [loading, user, profile, supabase, router]);
+
+  React.useEffect(() => {
+    const r = new URLSearchParams(window.location.search).get("company");
+    if (r === "confirmed" || r === "expired") {
+      setLinkResult(r);
+      window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+    }
+  }, []);
 
   // views are linkable: /home#campaigns
   React.useEffect(() => {
@@ -126,6 +139,9 @@ export function StartupHome() {
     { id: "profile", title: "Tell cafés who you are", art: "rocket", done: Boolean(startup.description && startup.logo_url),
       body: "Cafés see your logo and one-liner before they say yes. Add both so they know whose brand goes on their cups.",
       actions: <Link href="/start/startup?edit=1" className="mp-btn primary">Edit profile</Link> },
+    { id: "company", title: "Confirm it's your company", art: "building", done: Boolean(company?.confirmed),
+      body: `So nobody else can advertise as ${startup.name}. An email at your company's domain confirms it on its own; otherwise send a link to your work email, or we'll confirm it on our call before your first campaign is approved.`,
+      extra: company && !company.confirmed ? <CompanyConfirm name={startup.name} status={company} /> : undefined },
     { id: "areas", title: "Pick where to be seen", art: "pin", done: areas.length > 0,
       body: "Choose the neighborhoods where your customers buy coffee. Start from the suggestions, or search any city.",
       actions: <button type="button" className="mp-btn primary" onClick={() => jump(finder.current)}>Pick areas</button> },
@@ -187,6 +203,13 @@ export function StartupHome() {
       <main className="dash-main">
         {/* stays mounted while hidden, so the map, suggestions and filters survive a trip to Your campaigns */}
         <Notices refresh={list} />
+        {linkResult && (
+          <div className={linkResult === "confirmed" ? "mp-found" : "mp-error"} role="status">
+            <span>{linkResult === "confirmed"
+              ? `${startup.name} is confirmed. Your campaigns can be approved as soon as we've reviewed them.`
+              : "That confirmation link has expired or was already used. Send a new one from “Confirm it's your company”."}</span>
+          </div>
+        )}
         <div className="dash-view" hidden={view !== "find"}>
           <header className="dash-head">
             <div>
@@ -197,7 +220,7 @@ export function StartupHome() {
           </header>
 
           <SetupGuide storageKey={`divvit.mp.guide.startup.${user!.id}`} title="Get ready to launch" steps={steps}
-            sub="New here? Five steps from sign-up to your brand on coffee cups. Each one takes you to the right place." />
+            sub="New here? A few steps from sign-up to your brand on coffee cups. Each one takes you to the right place." />
 
           {campaigns.length > 0 && (
             <section className="dash-tiles" aria-label="Overview">
@@ -263,6 +286,9 @@ export function StartupHome() {
                     {open === c.id && (
                       <div className="mp-item-body">
                         {c.status === "submitted" && <p className="mp-note">Someone from the Divvit team will reach out to you within 24 hours. You haven&apos;t been charged; you&apos;ll pay once it&apos;s approved.</p>}
+                        {c.status === "submitted" && company && !company.confirmed && (
+                          <p className="mp-note">We&apos;ll confirm {startup.name} is your company before approving it, on our call or now with a work email (see &ldquo;Confirm it&apos;s your company&rdquo; under Find cafés).</p>
+                        )}
                         {c.review_note && c.status !== "submitted" && <div className="mp-found"><span>A note from the Divvit team: {c.review_note}</span></div>}
                         {c.status === "approved" && (
                           <div className="mp-row-actions">

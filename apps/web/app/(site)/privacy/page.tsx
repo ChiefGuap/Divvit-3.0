@@ -22,7 +22,7 @@ export default function Page() {
 
       <h2>What we collect</h2>
       <ul>
-        <li><b>Your account.</b> Your name, email address, password and whether you joined as a startup or a café. Passwords are stored by our sign-in provider in hashed form; we can&apos;t see them.</li>
+        <li><b>Your account.</b> Your name, email address, password and whether you joined as a startup or a café. Passwords are stored by our sign-in provider in hashed form; we can&apos;t see them. If you confirm your company with a work email, we keep that address too.</li>
         <li><b>Startup profiles.</b> Company name, website, LinkedIn and other public profile links, description, logo, category, location, stage, funding, team size and founding year, and the areas and campaigns you set up, including the sleeve designs you create or upload.</li>
         <li><b>Café listings.</b> Café name, address and map location, website, Instagram, opening hours, roughly how many cups you serve, which brands you&apos;ll carry, photos you upload, and how your café was verified (the method, any code we sent, and the outcome).</li>
         <li><b>Payments.</b> Payments are handled by Stripe on its own checkout page. We never see or store card numbers; we keep the amount, the date, the status and Stripe&apos;s reference numbers.</li>
@@ -42,6 +42,7 @@ export default function Page() {
       <ul>
         <li>To run the marketplace: show cafés to startups, send campaigns to cafés, print and deliver sleeves, and handle payments and payouts.</li>
         <li>To review campaigns and to verify that each café is run by the person who listed it, which may include calling the café&apos;s public phone number.</li>
+        <li>To confirm that each startup account belongs to the company it names: by checking that your email is at the company&apos;s web domain, by emailing a one-time link to a work address you give us, or on a call.</li>
         <li>To send you emails about your account and your campaigns, such as approvals, payments, offers and reports. We don&apos;t send marketing emails.</li>
         <li>To report how a campaign did, using scan counts and estimates.</li>
         <li>To keep Divvit secure, prevent abuse and improve the service.</li>
