@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { serverDb } from "@/lib/server/db";
-import { compose, emailConfigured, sendEmail } from "@/lib/server/notify";
+import { companyConfirmEmail, emailConfigured, sendEmail } from "@/lib/server/notify";
 import { overLimit, tooMany } from "@/lib/server/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { marketplace } from "@/lib/urls";
@@ -31,15 +31,8 @@ export async function POST(req: Request) {
   }
   const start = data as { token: string; email: string; startup: string; domain: string };
   const link = marketplace(`/api/startups/confirm?token=${start.token}`);
-  const { text, html } = compose({
-    heading: `Confirm ${start.startup} on Divvit`,
-    lines: [`Someone signed up to run coffee-sleeve campaigns for ${start.startup} and asked us to confirm it's really your company.`,
-      "If that was you, click below. The link works once, for 24 hours."],
-    button: { label: `Confirm ${start.startup}`, href: link },
-    footer: `If you didn't ask for this, ignore this email and nothing will change. Questions: reply to this email.`,
-  });
   try {
-    await sendEmail({ to: [start.email], subject: `Confirm ${start.startup} on Divvit`, text, html });
+    await sendEmail(companyConfirmEmail(start.startup, start.email, link));
   } catch (e) {
     console.error("[company-confirm] send failed:", e instanceof Error ? e.message : e);
     return NextResponse.json({ error: "We couldn't send that email. Try again in a minute." }, { status: 502 });
