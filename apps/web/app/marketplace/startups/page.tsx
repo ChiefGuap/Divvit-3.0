@@ -1,7 +1,4 @@
-import { StartupBuilder } from "@/components/marketplace/StartupBuilder";
+import { redirect } from "next/navigation";
 
-export const metadata = { title: "Start a campaign" };
-
-export default function StartupsPage() {
-  return <StartupBuilder />;
-}
+// replaced by the one-question-per-screen onboarding
+export default function Page() { redirect("/start/startup"); }

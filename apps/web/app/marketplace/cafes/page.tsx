@@ -1,7 +1,4 @@
-import { CafeJoin } from "@/components/marketplace/CafeJoin";
+import { redirect } from "next/navigation";
 
-export const metadata = { title: "For cafés" };
-
-export default function CafesPage() {
-  return <CafeJoin />;
-}
+// replaced by the one-question-per-screen onboarding
+export default function Page() { redirect("/start/cafe"); }

@@ -1,4 +1,5 @@
 import { safeFetch } from "@/lib/server/safe-fetch";
+import { overLimit } from "@/lib/server/rate-limit";
 
 /* Same-origin image proxy for logos found by autofill. Drawing a cross-origin
    image onto the sleeve canvas would taint it (no WebGL upload, no export),
@@ -7,6 +8,7 @@ import { safeFetch } from "@/lib/server/safe-fetch";
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
+  if (overLimit(req, "image", 240)) return new Response("too many requests", { status: 429, headers: { "Retry-After": "60" } });
   const src = new URL(req.url).searchParams.get("url") || "";
   if (!src) return new Response("missing url", { status: 400 });
   try {

@@ -30,6 +30,8 @@ export function CafeMap({ cafes, selected, isEligible, areas, focus, onToggle, c
   const [ready, setReady] = React.useState(false);
   const toggleRef = React.useRef(onToggle);
   toggleRef.current = onToggle;
+  const focusRef = React.useRef(focus);
+  focusRef.current = focus;
 
   React.useEffect(() => {
     const m = new maplibregl.Map({
@@ -81,7 +83,16 @@ export function CafeMap({ cafes, selected, isEligible, areas, focus, onToggle, c
       setReady(true);
     });
     map.current = m;
-    return () => { popup.remove(); m.remove(); map.current = null; };
+
+    // a map made while hidden (a tab that isn't showing) has no size; size and fit it once it shows
+    let hidden = !el.current!.clientWidth;
+    const ro = new ResizeObserver(([e]) => {
+      if (!e.contentRect.width || !e.contentRect.height) { hidden = true; return; }
+      m.resize();
+      if (hidden) { hidden = false; m.fitBounds(focusRef.current ?? US, { padding: 48, maxZoom: 13.5, duration: 0 }); }
+    });
+    ro.observe(el.current!);
+    return () => { ro.disconnect(); popup.remove(); m.remove(); map.current = null; };
   }, []);
 
   // keep the café dots in sync

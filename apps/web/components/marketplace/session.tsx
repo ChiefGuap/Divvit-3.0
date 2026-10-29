@@ -39,7 +39,9 @@ export function MpSessionProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     refresh();
     const { data } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") refresh();
+      // Defer: calling Supabase from inside this callback deadlocks on the auth
+      // lock that signIn/signOut are still holding.
+      if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") setTimeout(refresh, 0);
     });
     return () => data.subscription.unsubscribe();
   }, [supabase, refresh]);

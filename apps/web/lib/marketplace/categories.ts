@@ -2,16 +2,16 @@
    categories they welcome (empty = all) and the ones they block. */
 
 export const CATEGORIES = [
-  { id: "tech", label: "Tech & software" },
-  { id: "fintech", label: "Fintech" },
-  { id: "health", label: "Health & wellness" },
-  { id: "consumer", label: "Consumer products" },
-  { id: "food_bev", label: "Food & beverage" },
-  { id: "climate", label: "Climate & sustainability" },
-  { id: "education", label: "Education" },
-  { id: "nonprofit", label: "Nonprofit & community" },
-  { id: "local", label: "Local business" },
-  { id: "crypto", label: "Crypto & web3" },
+  { id: "tech", label: "Tech & software", art: "code" },
+  { id: "fintech", label: "Fintech", art: "card" },
+  { id: "health", label: "Health & wellness", art: "pulse" },
+  { id: "consumer", label: "Consumer products", art: "bag" },
+  { id: "food_bev", label: "Food & drink", art: "soda" },
+  { id: "climate", label: "Climate", art: "leaf" },
+  { id: "education", label: "Education", art: "cap" },
+  { id: "nonprofit", label: "Nonprofit", art: "hands" },
+  { id: "local", label: "Local business", art: "pin" },
+  { id: "crypto", label: "Crypto & web3", art: "coin" },
 ] as const;
 
 export type CategoryId = (typeof CATEGORIES)[number]["id"];

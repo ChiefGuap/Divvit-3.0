@@ -9,7 +9,7 @@ export function Range({ label, value, min, max, step = 1, onChange, format = Str
     <label className="mp-range">
       <div className="mp-range-top"><span className="mp-label">{label}</span><b>{format(value)}</b></div>
       <input
-        type="range" min={min} max={max} step={step} value={value}
+        type="range" min={min} max={max} step={step} value={value} aria-label={label} aria-valuetext={format(value)}
         style={{ "--p": `${p}%` } as React.CSSProperties}
         onChange={(e) => onChange(Number(e.target.value))}
       />

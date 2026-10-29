@@ -11,8 +11,8 @@ export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
   if (host.startsWith("marketplace.")) {
-    // already-internal paths (and the API) pass straight through
-    if (pathname.startsWith("/marketplace") || pathname.startsWith("/api")) {
+    // already-internal paths, the API and the crawler files pass straight through
+    if (pathname.startsWith("/marketplace") || pathname.startsWith("/api") || pathname === "/robots.txt" || pathname === "/sitemap.xml") {
       return updateSession(request, () => NextResponse.next({ request }));
     }
     const url = request.nextUrl.clone();

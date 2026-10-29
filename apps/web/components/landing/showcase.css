@@ -6,10 +6,37 @@
   --ink: #111827; --txt-2: #4b5563; --muted: #6b7280; --faint: #9ca3af; --hairline: rgba(17, 24, 39, .07);
   --shadow-card: 0 0 0 1px rgba(17, 24, 39, .07), 0 2px 6px rgba(58, 32, 137, .05);
   transition: --accent .9s ease;
-  position: fixed; top: 66px; right: 0; bottom: 0; left: 0; z-index: 1; overflow: hidden;
+  /* the first screen of the homepage; the story sections scroll up after it */
+  position: relative; margin-top: 66px; height: calc(100svh - 66px); min-height: 560px; z-index: 1; overflow: hidden;
   font-family: Inter, system-ui, sans-serif; color: var(--ink);
 }
-.lp-stage { position: absolute; inset: 0; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+/* pan-y: a vertical swipe scrolls the page, a sideways drag spins the cup */
+/* the page's headline, over the cup: words rise out of a mask one after another, then an underline
+   draws itself under "over coffee" */
+.lp-headline { position: absolute; z-index: 5; top: clamp(14px, 3.2vh, 34px); left: 0; right: 0; margin: 0 auto; padding: 0 20px; max-width: 1100px;
+  text-align: center; text-wrap: balance; pointer-events: none;
+  font-family: Inter, system-ui, sans-serif; font-weight: 400; font-size: clamp(30px, 3.9vw, 58px); line-height: 1.06; letter-spacing: -0.04em; color: var(--ink); }
+.lp-headline .w { display: inline-block; overflow: hidden; vertical-align: bottom; padding: 0 .02em .14em; margin-bottom: -.14em; }
+.lp-headline .w > * { display: inline-block; transform: translateY(110%); animation: lp-word .95s cubic-bezier(.22, 1, .36, 1) both;
+  animation-delay: calc(.2s + var(--d) * 75ms); }
+.lp-headline em { position: relative; padding-right: .04em; font-family: "Instrument Serif", Georgia, serif; font-style: italic; font-weight: 400;
+  font-size: 1.12em; letter-spacing: -0.015em; color: #5b3fd6; }
+.lp-headline em svg { position: absolute; left: 0; right: 0; bottom: -.02em; width: 100%; height: .22em; overflow: visible; }
+.lp-headline em path { fill: none; stroke: #8c52ff; stroke-width: 3; stroke-linecap: round; vector-effect: non-scaling-stroke;
+  stroke-dasharray: 260; stroke-dashoffset: 260; animation: lp-draw .9s 1.05s cubic-bezier(.65, 0, .35, 1) forwards; }
+@media (max-width: 760px) {
+  .lp-headline { font-size: clamp(22px, 6.4vw, 30px); letter-spacing: -0.03em; }
+  /* phones stack the headline, four cards and the cup: give the cup room rather than shrinking it to fit one screen */
+  .lp { height: max(calc(100svh - 66px), 840px); }
+}
+@keyframes lp-word { to { transform: none; } }
+@keyframes lp-draw { to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .lp-headline .w > * { animation: none; transform: none; }
+  .lp-headline em path { animation: none; stroke-dashoffset: 0; }
+}
+
+.lp-stage { position: absolute; inset: 0; cursor: grab; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
 .lp-stage.dragging { cursor: grabbing; }
 .lp-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .lp-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
@@ -67,8 +94,8 @@
 .lp-title { position: absolute; left: 0; right: 0; top: 0; text-align: center; pointer-events: none; padding: 0 16px; visibility: hidden; user-select: none; }
 .lp .eyebrow { font-size: 11px; letter-spacing: .24em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
 .lp .eyebrow b { color: var(--accent-ink); font-weight: 700; }
-.lp h1 { margin: 8px 0 6px; font-size: clamp(30px, 4.2vw, 50px); line-height: 1; letter-spacing: -.02em; font-weight: 800; color: var(--ink); perspective: 600px; }
-.lp h1 .ch { display: inline-block; transform-origin: 50% 100%; white-space: pre; }
+.lp-title h2 { margin: 8px 0 6px; font-size: clamp(30px, 4.2vw, 50px); line-height: 1; letter-spacing: -.02em; font-weight: 800; color: var(--ink); perspective: 600px; }
+.lp-title h2 .ch { display: inline-block; transform-origin: 50% 100%; white-space: pre; }
 .lp .tagline { margin: 0; font-size: clamp(13px, 1.3vw, 16px); color: var(--txt-2); }
 .lp-bot { position: absolute; left: 0; right: 0; bottom: clamp(16px, 4.5vh, 44px); display: flex; flex-direction: column; align-items: center; gap: 12px;
   padding: 0 16px; pointer-events: none; user-select: none; }

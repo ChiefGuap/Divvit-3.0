@@ -314,7 +314,9 @@ export function mountShowcase(root: HTMLElement, startups: ShowcaseStartup[] = S
     stage.setSize(W, Hh);
     const small = W <= 760;
     const navH = Hh - (hudBot.getBoundingClientRect().top - root.getBoundingClientRect().top) + (small ? 12 : 20);
-    const titleH = Math.max(small ? 108 : 120, hudTitle.offsetHeight + 16), topPad = small ? 14 : 26;
+    // leave room under the headline at the top
+    const headline = $("banner");
+    const titleH = Math.max(small ? 108 : 120, hudTitle.offsetHeight + 16), topPad = headline.offsetTop + headline.offsetHeight + (small ? 10 : 18);
     const avail = Hh - topPad - titleH - navH;
     const Yr = LAYOUTS.tall[1].y!;
 
@@ -372,9 +374,16 @@ export function mountShowcase(root: HTMLElement, startups: ShowcaseStartup[] = S
 
   /* ---------------- loop ---------------- */
   let prev = performance.now(), cardDelta = 0, raf = 0;
+  // nothing to draw while the cup is scrolled out of view
+  let onScreen = true;
+  const vis = new IntersectionObserver(([e]) => { onScreen = e.isIntersecting; prev = performance.now(); });
+  vis.observe(root);
+  cleanups.push(() => vis.disconnect());
+
   function frame(now: number) {
     if (disposed) return;
     raf = requestAnimationFrame(frame);
+    if (!onScreen) return;
     const dt = THREE.MathUtils.clamp((now - prev) / 1000, 0, 0.05);
     prev = now;
     const t = now / 1000;

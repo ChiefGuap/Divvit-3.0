@@ -3,6 +3,7 @@
 /* City / neighborhood / address search (→ /api/geocode). */
 
 import React from "react";
+import { PinIcon } from "./art";
 
 export type Place = {
   id: string; label: string; name: string; lat: number; lng: number; bbox: [number, number, number, number];
@@ -57,7 +58,7 @@ export function PlaceSearch({ onPick, placeholder, mode = "place", autoFocus }: 
           {error && <div className="mp-small mp-muted" style={{ padding: 10 }}>{error}</div>}
           {results.map((r, i) => (
             <button key={r.id} className={i === hi ? "hi" : ""} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(r)}>
-              <span className="mp-logo-ph">📍</span>
+              <span className="mp-logo-ph"><PinIcon /></span>
               <span><b>{r.name}</b><small>{r.label}</small></span>
             </button>
           ))}

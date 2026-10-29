@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-/* Email-confirmation landing. Handles both PKCE (?code=) and token-hash
+/* Email-confirmation and password-reset landing. Handles both PKCE (?code=) and token-hash
    (?token_hash=&type=) links, then sends the user on to `next`.
    Add <marketplace URL>/auth/callback to Supabase → Auth → URL configuration. */
 
@@ -21,5 +21,7 @@ export async function GET(request: Request) {
 
   const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? url.host;
   const base = `${url.protocol}//${host}`;
-  return NextResponse.redirect(new URL(ok ? safeNext : `/signin?error=confirm`, base));
+  // a dead password-reset link can't send them to sign in (they don't know the password): offer a new link
+  const failed = safeNext.startsWith("/reset") ? "/reset/new" : "/signin?error=confirm";
+  return NextResponse.redirect(new URL(ok ? safeNext : failed, base));
 }

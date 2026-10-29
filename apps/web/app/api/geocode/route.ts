@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { overLimit, tooMany } from "@/lib/server/rate-limit";
 
 /* Place search for the marketplace map, proxied to Photon (OpenStreetMap,
    keyless). Returns each place's bounding box so the map can zoom to it.
@@ -17,6 +18,7 @@ type PhotonFeature = {
 };
 
 export async function GET(req: Request) {
+  if (overLimit(req, "geocode", 60)) return tooMany();
   const { searchParams } = new URL(req.url);
   const q = (searchParams.get("q") || "").trim().slice(0, 120);
   const mode = searchParams.get("mode") === "address" ? "address" : "place";
@@ -39,13 +41,18 @@ export async function GET(req: Request) {
       const p = f.properties;
       const [lng, lat] = f.geometry.coordinates;
       const street = [p.housenumber, p.street].filter(Boolean).join(" ");
-      const label = mode === "address"
-        ? [p.name && p.name !== street ? p.name : null, street, p.city ?? p.locality, p.state].filter(Boolean).join(", ")
-        : [p.name, p.city && p.city !== p.name ? p.city : null, p.state, p.countrycode !== "US" ? p.country : null].filter(Boolean).join(", ");
+      const parts = mode === "address"
+        ? [p.name && p.name !== street ? p.name : null, street, p.city ?? p.locality, p.state]
+        : [p.name, p.city && p.city !== p.name ? p.city : null, p.state, p.countrycode !== "US" ? p.country : null];
+      const label = [...new Set(parts.filter(Boolean))].join(", ");  // "New York, New York" → once
       // Photon extent is [minLon, maxLat, maxLon, minLat]; return [west, south, east, north]
       const e = p.extent;
-      const d = mode === "address" ? 0.004 : 0.03;
-      const bbox: [number, number, number, number] = e ? [e[0], e[3], e[2], e[1]] : [lng - d, lat - d, lng + d, lat + d];
+      // US neighborhoods come back as points with no extent: draw a neighborhood-sized box (≈2.7 × 2 km),
+      // widened east–west so it isn't squashed at higher latitudes
+      const hood = p.type === "locality" || p.type === "district";
+      const dy = mode === "address" ? 0.004 : hood ? 0.012 : 0.03;
+      const dx = dy / Math.max(0.3, Math.cos((lat * Math.PI) / 180));
+      const bbox: [number, number, number, number] = e ? [e[0], e[3], e[2], e[1]] : [lng - dx, lat - dy, lng + dx, lat + dy];
       return {
         id: `${lng.toFixed(5)},${lat.toFixed(5)}`, label, name: p.name ?? street, lat, lng, bbox,
         city: p.city ?? (p.type === "city" ? p.name : p.locality) ?? p.county ?? null, region: p.state ?? null,

@@ -61,8 +61,8 @@ export default async function HowItWorks() {
         </Reveal>
         <Reveal delay={0.18}>
           <div className="hiw-ctas">
-            <a className="divvit-plainsm lg" href={marketplace("/startups")}><span>Start a campaign</span></a>
-            <a className="divvit-ghost lg" href={marketplace("/cafes")}>List your café</a>
+            <a className="divvit-plainsm lg" href={marketplace("/start/startup")}><span>Start a campaign</span></a>
+            <a className="divvit-ghost lg" href={marketplace("/start/cafe")}>List your café</a>
           </div>
         </Reveal>
       </section>
@@ -79,7 +79,7 @@ export default async function HowItWorks() {
                   <div className="art-form">
                     <div className="art-field"><span>Company</span><b>Lumen</b></div>
                     <div className="art-field"><span>HQ</span><b>Austin, TX</b></div>
-                    <div className="art-chip">✦ Filled from your website</div>
+                    <div className="art-chip">Filled from your website</div>
                   </div>
                 )}
                 {s.art === "map" && (
@@ -119,7 +119,7 @@ export default async function HowItWorks() {
             <Reveal delay={0.1}>
               <p className="hiw-lede">You stay in control: what you carry, how many sleeves, and every offer you accept.</p>
             </Reveal>
-            <Reveal delay={0.15}><a className="divvit-plainsm lg" href={marketplace("/cafes")}><span>See what you could earn</span></a></Reveal>
+            <Reveal delay={0.15}><a className="divvit-plainsm lg" href={marketplace("/start/cafe")}><span>See what you could earn</span></a></Reveal>
           </div>
           <ol className="hiw-list">
             {CAFE_STEPS.map((s, i) => (
@@ -171,7 +171,7 @@ export default async function HowItWorks() {
             ) : (
               <p className="hiw-note">Open the marketplace to get a live quote.</p>
             )}
-            <a className="divvit-plainsm" href={marketplace("/startups")}><span>Build your own quote</span></a>
+            <a className="divvit-plainsm" href={marketplace("/start/startup")}><span>Build your own quote</span></a>
           </Reveal>
         </div>
       </section>
@@ -196,8 +196,8 @@ export default async function HowItWorks() {
         <Reveal><h2>Ready to get on the cup?</h2></Reveal>
         <Reveal delay={0.06}>
           <div className="hiw-ctas">
-            <a className="divvit-plainsm lg" href={marketplace("/startups")}><span>Start a campaign</span></a>
-            <a className="divvit-ghost lg" href={marketplace("/cafes")}>Join as a café</a>
+            <a className="divvit-plainsm lg" href={marketplace("/start/startup")}><span>Start a campaign</span></a>
+            <a className="divvit-ghost lg" href={marketplace("/start/cafe")}>Join as a café</a>
           </div>
         </Reveal>
       </section>

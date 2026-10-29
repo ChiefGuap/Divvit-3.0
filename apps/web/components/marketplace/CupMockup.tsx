@@ -43,7 +43,7 @@ export function CupMockup({ design, base, className, hint = true }: {
       cleanups.push(() => ro.disconnect());
       fit();
 
-      let vel = 0, dragging = false, lastX = 0, lastT = 0, lastInput = 0;
+      let vel = 0, dragging = false, lastX = 0, lastT = 0, lastInput = performance.now() + 1500; // show the front first
       const down = (e: PointerEvent) => { dragging = true; lastX = e.clientX; lastT = performance.now(); vel = 0; el.setPointerCapture(e.pointerId); el.classList.add("dragging"); };
       const move = (e: PointerEvent) => {
         if (!dragging) return;
@@ -71,7 +71,7 @@ export function CupMockup({ design, base, className, hint = true }: {
         if (!dragging) {
           vel *= Math.exp(-dt * 2.2);                                   // inertia
           const idle = now - lastInput > 2500;
-          rot.current += (vel + (idle ? -0.35 : 0)) * dt;               // then a slow idle turn
+          rot.current += (vel + (idle ? -0.25 : 0)) * dt;               // then a slow idle turn
         }
         stage!.cup.rotation.y = rot.current;
         stage!.update(dt, now / 1000);
