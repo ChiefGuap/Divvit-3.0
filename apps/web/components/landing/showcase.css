@@ -112,6 +112,11 @@
 .lp-hint .sw { display: inline-block; animation: lp-swipe 2.4s ease-in-out infinite; }
 @keyframes lp-swipe { 0%,100% { transform: translateX(-6px); } 50% { transform: translateX(6px); } }
 
+/* phones: a fixed 2×2 grid above the cup — the anchor is the card's inner bottom corner,
+   cards share their column's width and their row's height */
+.lp .anchor[data-side="gl"] .slot { right: 0; bottom: 0; align-items: stretch; }
+.lp .anchor[data-side="gr"] .slot { left: 0; bottom: 0; align-items: stretch; }
+
 /* compact cards — the layout fit switches these on when space is tight */
 .lp.compact .card { width: 160px; padding: 11px 12px 12px; border-radius: 16px; }
 .lp.compact .big { font-size: 24px; }
@@ -126,3 +131,5 @@
 .lp.compact .dotgrid i { width: 6px; height: 6px; }
 .lp.compact .legend { font-size: 9.5px; gap: 3px 8px; margin-top: 6px; }
 @media (max-width: 760px) { .lp-hint { font-size: 11px; } }
+/* after .compact, which would otherwise keep phone cards at 160px */
+.lp.grid .card { width: var(--lp-cw); }

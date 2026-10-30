@@ -14,7 +14,8 @@ export function SiteHeader() {
   const [island, setIsland] = React.useState(false);
 
   React.useEffect(() => {
-    const onScroll = () => setIsland(window.scrollY > 0.5);
+    // a little hysteresis: iOS's bounce at the top of the page would otherwise flip it back and forth
+    const onScroll = () => setIsland((was) => window.scrollY > (was ? 4 : 12));
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);

@@ -221,10 +221,13 @@ function room(w: number, h: number, d: number, back: THREE.Texture, floorColor =
   const ceil = new THREE.Mesh(new THREE.PlaneGeometry(w, d), basic({ color: 0xfff1dc }));
   ceil.rotation.x = Math.PI / 2; ceil.position.set(0, h - 0.001, -d / 2);
   const sideMat = basic({ color: 0xe8d6bd });
+  // side walls sit a hair inside the room's width: flush with the building's own inner walls they'd
+  // fight it for the same pixels and flicker as the model turns (worst on phones' shallower depth buffers)
+  const inset = w / 2 - 0.015;
   const l = new THREE.Mesh(new THREE.PlaneGeometry(d, h), sideMat);
-  l.rotation.y = Math.PI / 2; l.position.set(-w / 2, h / 2, -d / 2);
+  l.rotation.y = Math.PI / 2; l.position.set(-inset, h / 2, -d / 2);
   const r = new THREE.Mesh(new THREE.PlaneGeometry(d, h), sideMat);
-  r.rotation.y = -Math.PI / 2; r.position.set(w / 2, h / 2, -d / 2);
+  r.rotation.y = -Math.PI / 2; r.position.set(inset, h / 2, -d / 2);
   g.add(wall, floor, ceil, l, r);
   return g;
 }
@@ -481,7 +484,8 @@ export function mountBuilding(canvas: HTMLCanvasElement, kind: BuildingKind) {
   // (the startup off the right, the café — mirrored — off the left)
   const startup = kind === "startup";
   const baseFov = startup ? 8.6 : 7.8;
-  const camera = new THREE.PerspectiveCamera(baseFov, 1, 1, 120);
+  // the camera stands 30+ units off: a near plane at 10 (not 1) spends the depth buffer where the building is
+  const camera = new THREE.PerspectiveCamera(baseFov, 1, 10, 120);
   const view = startup
     ? { pos: new THREE.Vector3(-16, 5.2, 39), look: new THREE.Vector3(-2.3, 2.55, 0) }
     : { pos: new THREE.Vector3(14.5, 4.0, 31), look: new THREE.Vector3(0.2, 1.65, 0.9) };

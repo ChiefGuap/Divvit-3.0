@@ -25,7 +25,7 @@ type Pending = {
   cafe: { id: string; name: string; address: string | null; neighborhood: string | null; city: string; website: string | null; osm_ref: string | null;
     email: string; name_of_owner: string | null; method: "phone" | "review" | "website" | null } | null;
 };
-type Mail = { to: string[]; subject: string; text: string; html: string; replyTo?: string };
+export type Mail = { to: string[]; subject: string; text: string; html: string; replyTo?: string };
 
 const money = (c: number) => (c / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
 const esc = (s: string) => s.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]!);
@@ -35,7 +35,7 @@ const when = (k: NonNullable<Pending["campaign"]>) => (k.start_date
 const first = (name: string | null) => (name || "").split(" ")[0] || "there";
 
 /** a plain email: a heading, a few lines, an optional facts table and a button */
-function compose({ heading, lines, facts = [], list, button, footer }: {
+export function compose({ heading, lines, facts = [], list, button, footer }: {
   heading: string; lines: string[]; facts?: [string, string][]; list?: { title: string; items: string[] };
   button?: { label: string; href: string }; footer?: string;
 }) {
@@ -68,8 +68,8 @@ function message(p: Pending, team: string[]): Mail | null {
   }
   const k = p.campaign, s = p.startup, owner = p.owner;
   if (!k || !s || !owner) return null;
-  const cafeLine = (c: Pending["cafes"][number]) => `${c.name} — ${[c.neighborhood, c.city].filter(Boolean).join(", ")} · ${c.sleeves} sleeves${c.demo ? " (sample café)" : ""}`;
-  const campaignFacts: [string, string][] = [["Starts", `${when(k)} · ${k.weeks} weeks`], ["Sleeves per café", String(k.sleeves_per_cafe)],
+  const cafeLine = (c: Pending["cafes"][number]) => `${c.name} — ${[c.neighborhood, c.city].filter(Boolean).join(", ")} · ${c.sleeves.toLocaleString("en-US")} sleeves${c.demo ? " (sample café)" : ""}`;
+  const campaignFacts: [string, string][] = [["Starts", `${when(k)} · ${k.weeks} weeks`], ["Sleeves per café", k.sleeves_per_cafe.toLocaleString("en-US")],
     ["Branded drink", k.branded_drink ? "Yes" : "No"], ["Cafés", String(p.cafes.length)]];
 
   switch (p.kind) {
@@ -123,7 +123,7 @@ function message(p: Pending, team: string[]): Mail | null {
         heading: `New campaign from ${s.name}`,
         lines: [`Hi ${first(o.name)},`, `${s.name} wants to put its brand on ${o.cafe_name}'s cups. You'd earn ${money(o.payout_cents)}.`,
           ...(s.description ? [`What they do: ${s.description}`] : []), "Accept or pass from your inbox — you approve every campaign, and passing costs nothing."],
-        facts: [["You'd earn", money(o.payout_cents)], ["Sleeves", String(o.sleeves)], ["Starts", `${when(k)} · ${k.weeks} weeks`],
+        facts: [["You'd earn", money(o.payout_cents)], ["Sleeves", o.sleeves.toLocaleString("en-US")], ["Starts", `${when(k)} · ${k.weeks} weeks`],
           ["Branded drink", o.branded_drink ? "Yes" : "No"]],
         button: { label: "Review the offer", href: marketplace(`/cafes/inbox#offer-${o.id}`) },
         footer: "Sleeves arrive printed and packed before the start date.",
@@ -144,6 +144,23 @@ function message(p: Pending, team: string[]): Mail | null {
 }
 
 export type SendResult = { sent: number; pending: number; configured: boolean };
+
+export const emailConfigured = () => Boolean(process.env.RESEND_API_KEY);
+
+/** Send one email now through Resend (for links that can't wait for the outbox). */
+export async function sendEmail(m: Mail) {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) throw new Error("Email isn't set up (RESEND_API_KEY)");
+  const team = (process.env.DIVVIT_TEAM_EMAIL ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  const r = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from: process.env.DIVVIT_FROM_EMAIL || "Divvit <onboarding@resend.dev>", to: m.to, subject: m.subject,
+      text: m.text, html: m.html, reply_to: m.replyTo ?? team[0] }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!r.ok) throw new Error(`Resend ${r.status}: ${(await r.text()).slice(0, 200)}`);
+}
 
 export async function sendPendingEmails(): Promise<SendResult> {
   const { db, secret } = serverDb();
@@ -174,4 +191,48 @@ export async function sendPendingEmails(): Promise<SendResult> {
     }
   }
   return { sent, pending: pending.length - sent, configured: true };
+}
+
+/** The work-email link that confirms a startup is the company it names (app/api/startups/confirm). */
+export function companyConfirmEmail(startup: string, to: string, link: string): Mail {
+  const { text, html } = compose({
+    heading: `Confirm ${startup} on Divvit`,
+    lines: [`Someone signed up to run coffee-sleeve campaigns for ${startup} and asked us to confirm it's really your company.`,
+      "If that was you, click below. The link works once, for 24 hours."],
+    button: { label: `Confirm ${startup}`, href: link },
+    footer: "If you didn't ask for this, ignore this email and nothing will change. Questions: reply to this email.",
+  });
+  return { to: [to], subject: `Confirm ${startup} on Divvit`, text, html };
+}
+
+/** Every email Divvit sends, filled in with made-up details, for the team to read before launch (admin → Emails). */
+export function sampleEmails(team: string[]): { kind: string; label: string; mail: Mail }[] {
+  const base: Omit<Pending, "id" | "kind"> = {
+    campaign: { id: "sample", name: "Lumen · Williamsburg, Lower East Side", start_date: "2026-11-17", weeks: 4, sleeves_per_cafe: 1000,
+      branded_drink: true, total_cents: 482_000, final_cents: 460_000, review_note: null, design_url: null, created_at: new Date().toISOString() },
+    startup: { name: "Lumen", website: "https://lumen.example", category: "tech", hq: "New York, NY",
+      description: "AI meeting notes that write themselves.", linkedin_url: "https://www.linkedin.com/company/lumen-example" },
+    owner: { email: "jane@lumen.example", name: "Jane Park" },
+    cafes: [
+      { name: "Juniper Coffee", neighborhood: "Williamsburg", city: "New York", sleeves: 1000, demo: false },
+      { name: "Second Shot", neighborhood: "Lower East Side", city: "New York", sleeves: 1000, demo: false },
+    ],
+    offer: { id: "sample", cafe_name: "Juniper Coffee", sleeves: 1000, payout_cents: 12_600, branded_drink: true, email: "owner@juniper.example", name: "Sam Rivera" },
+    cafe: { id: "sample", name: "Juniper Coffee", address: "120 Grand St", neighborhood: "Williamsburg", city: "New York",
+      website: "https://juniper.example", osm_ref: "node/123", email: "owner@juniper.example", name_of_owner: "Sam Rivera", method: "phone" },
+  };
+  const kinds: [Pending["kind"], string, Partial<Pending>?][] = [
+    ["campaign_submitted", "New campaign → Divvit team"],
+    ["campaign_approved", "Approved, pay to launch → startup"],
+    ["campaign_declined", "Not approved → startup", { campaign: { ...base.campaign!, review_note: "None of these cafés can take a fintech campaign right now. Try the cafés in DUMBO." } }],
+    ["campaign_paid", "Payment received → Divvit team"],
+    ["offer_new", "New offer → café"],
+    ["campaign_finished", "Report ready → startup"],
+    ["cafe_verification", "Verify a café → Divvit team"],
+  ];
+  const out = kinds.map(([kind, label, extra]) => ({ kind: kind as string, label, mail: message({ id: 0, kind, ...base, ...extra } as Pending, team) }))
+    .filter((x): x is { kind: string; label: string; mail: Mail } => x.mail !== null);
+  out.push({ kind: "company_confirm", label: "Confirm your company → startup's work email",
+    mail: companyConfirmEmail("Lumen", "jane@lumen.example", "https://marketplace.divvit.app/api/startups/confirm?token=…") });
+  return out;
 }

@@ -1,8 +1,8 @@
 "use client";
 
 /* The Divvit team's page (admins only, mp_admins): review campaigns before they go
-   to cafés, and verify that each café is run by whoever claimed it.
-   /admin#campaigns (default) · /admin#cafes */
+   to cafés, verify that each café is run by whoever claimed it, and check email.
+   /admin#campaigns (default) · /admin#cafes · /admin#emails */
 
 import { useRouter } from "next/navigation";
 import React from "react";
@@ -10,8 +10,9 @@ import { useMp } from "./session";
 import { AppBar } from "./flow";
 import { AdminCampaigns } from "./AdminCampaigns";
 import { AdminCafes } from "./AdminCafes";
+import { AdminEmails } from "./AdminEmails";
 
-type Tab = "campaigns" | "cafes";
+type Tab = "campaigns" | "cafes" | "emails";
 
 export function Admin() {
   const { supabase, user, loading } = useMp();
@@ -25,7 +26,7 @@ export function Admin() {
     supabase.rpc("mp_is_admin").then(({ data }) => setOk(data === true));
   }, [loading, user, router, supabase]);
   React.useEffect(() => {
-    const fromHash = () => setTab(window.location.hash === "#cafes" ? "cafes" : "campaigns");
+    const fromHash = () => setTab(window.location.hash === "#cafes" ? "cafes" : window.location.hash === "#emails" ? "emails" : "campaigns");
     fromHash();
     window.addEventListener("hashchange", fromHash);
     return () => window.removeEventListener("hashchange", fromHash);
@@ -45,8 +46,9 @@ export function Admin() {
         <div className="scopes" role="tablist" aria-label="Admin">
           <button type="button" role="tab" aria-selected={tab === "campaigns"} className={tab === "campaigns" ? "on" : ""} onClick={() => go("campaigns")}>Campaigns</button>
           <button type="button" role="tab" aria-selected={tab === "cafes"} className={tab === "cafes" ? "on" : ""} onClick={() => go("cafes")}>Café verification</button>
+          <button type="button" role="tab" aria-selected={tab === "emails"} className={tab === "emails" ? "on" : ""} onClick={() => go("emails")}>Emails</button>
         </div>
-        {tab === "campaigns" ? <AdminCampaigns /> : <AdminCafes bare />}
+        {tab === "campaigns" ? <AdminCampaigns /> : tab === "cafes" ? <AdminCafes bare /> : <AdminEmails />}
       </main>
     </>
   );

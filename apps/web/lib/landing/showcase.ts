@@ -302,6 +302,16 @@ export function mountShowcase(root: HTMLElement, startups: ShowcaseStartup[] = S
 
   /* ---------------- layout: fit everything in pixels ---------------- */
   let W = 0, Hh = 0, DRIFT = 0.45, CARD_W = 236;
+  // phones: the four cards sit in a fixed 2×2 grid above the cup (equal margins, a 10px gutter,
+  // each row as tall as its taller card) instead of drifting with it
+  const GRID_PAD = 16, GRID_GAP = 10;
+  let grid = false;
+  const rowH = { upper: 0, lower: 0 };
+  // a card's own height, read from its last line so a stretched card doesn't feed back into it
+  const natural = (slot: HTMLElement) => Math.max(0, ...[...slot.children].map((c) => {
+    const card = c as HTMLElement, last = card.lastElementChild as HTMLElement | null;
+    return last ? last.offsetTop - card.offsetTop + last.offsetHeight + 12 : card.offsetHeight;
+  }));
   const v3 = new THREE.Vector3();
   const toScreen = (x: number, y: number, z: number): [number, number] => {
     v3.set(x, y, z).project(camera);
@@ -341,8 +351,19 @@ export function mountShowcase(root: HTMLElement, startups: ShowcaseStartup[] = S
     CARD_W = pick.cw;
     root.classList.toggle("compact", pick.compact);
     layout = pick.tall ? LAYOUTS.tall : LAYOUTS.wide;
-    DRIFT = pick.tall ? 0.12 : 0.45;
-    slots.forEach((sl, i) => { sl.stackH = null; sl.anchor.dataset.side = layout[i].side; });
+    grid = pick.tall && small;
+    root.classList.toggle("grid", grid);
+    if (grid) {
+      CARD_W = (W - 2 * GRID_PAD - GRID_GAP) / 2;
+      root.style.setProperty("--lp-cw", `${CARD_W}px`);
+      rowH.upper = rowH.lower = 0;
+    }
+    DRIFT = grid ? 0 : pick.tall ? 0.12 : 0.45;
+    slots.forEach((sl, i) => {
+      sl.stackH = null;
+      sl.anchor.dataset.side = grid ? (layout[i].side === "tl" ? "gl" : "gr") : layout[i].side;
+      sl.slot.style.height = "";
+    });
 
     const s = Math.max(60, pick.sc);
     let content: number;
@@ -408,10 +429,25 @@ export function mountShowcase(root: HTMLElement, startups: ShowcaseStartup[] = S
     cardDelta += ((R - activeK * SECTOR) * DRIFT - cardDelta) * (1 - Math.exp(-dt * 5));
     const delta = cardDelta;
 
+    // phones: rows from the cards' real heights (eased, so a startup switch doesn't jump), bottom row just above the lid
+    let gridBottom = 0;
+    if (grid) {
+      const h = slots.map((s) => natural(s.slot));
+      const ease = (a: number, b: number) => (a ? a + (b - a) * (1 - Math.exp(-dt * 10)) : b);
+      rowH.lower = ease(rowH.lower, Math.max(h[1], h[3]));
+      rowH.upper = ease(rowH.upper, Math.max(h[0], h[2]));
+      gridBottom = toScreen(0, LAYOUTS.tall[1].y!, 0)[1] - 8;
+    }
+
     for (const i of SLOT_ORDER) {
       const s = slots[i], L = layout[i];
       let x: number, y: number, d = 1;
-      if (L.stackOn !== undefined) {
+      if (grid) {
+        const right = L.side === "tr", lower = L.stackOn === undefined;
+        x = right ? W / 2 + GRID_GAP / 2 : W / 2 - GRID_GAP / 2;
+        y = lower ? gridBottom : gridBottom - rowH.lower - GRID_GAP;
+        s.slot.style.height = `${(lower ? rowH.lower : rowH.upper).toFixed(1)}px`;
+      } else if (L.stackOn !== undefined) {
         const below = slots[L.stackOn], h = below.slot.offsetHeight;
         s.stackH = s.stackH == null ? h : s.stackH + (h - s.stackH) * (1 - Math.exp(-dt * 10));
         x = below.px; y = below.py - s.stackH - 10;
@@ -421,7 +457,7 @@ export function mountShowcase(root: HTMLElement, startups: ShowcaseStartup[] = S
         [x, y] = toScreen(L.r! * Math.sin(a), L.y!, L.r! * Math.cos(a));
       }
       const leftSide = L.side === "l" || L.side === "tl", gap = L.side.length === 1 ? 14 : 6;
-      x = leftSide ? Math.max(x, 12 + CARD_W + gap) : Math.min(x, W - 12 - CARD_W - gap);
+      if (!grid) x = leftSide ? Math.max(x, 12 + CARD_W + gap) : Math.min(x, W - 12 - CARD_W - gap);
       s.px = x; s.py = y;
       const vis = smooth(-0.62, -0.08, d);
       const sc = 0.9 + 0.1 * smooth(-1, 1, d);
@@ -437,7 +473,9 @@ export function mountShowcase(root: HTMLElement, startups: ShowcaseStartup[] = S
       const facing = smooth(-0.05, 0.35, Math.cos(sa));
       const rv = s.reveal.v;
       s.line.setAttribute("x1", String(sx)); s.line.setAttribute("y1", String(sy));
-      s.line.setAttribute("x2", String(sx + (x - sx) * rv)); s.line.setAttribute("y2", String(sy + (y - sy) * rv));
+      // in the grid a line meets the middle of its card's bottom edge
+      const ex = grid ? x + (leftSide ? -CARD_W / 2 : CARD_W / 2) : x;
+      s.line.setAttribute("x2", String(sx + (ex - sx) * rv)); s.line.setAttribute("y2", String(sy + (y - sy) * rv));
       s.dot.setAttribute("cx", String(sx)); s.dot.setAttribute("cy", String(sy));
       s.halo.setAttribute("cx", String(sx)); s.halo.setAttribute("cy", String(sy));
       s.g.style.opacity = (Math.min(vis, facing) * Math.min(1, rv * 2)).toFixed(3);

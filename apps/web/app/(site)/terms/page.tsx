@@ -38,6 +38,7 @@ export default function Page() {
 
       <h2>For startups</h2>
       <ul>
+        <li><b>Confirming your company.</b> You may only advertise a company you&apos;re authorized to represent. Before we approve a campaign, we confirm the account belongs to that company, by your email&apos;s domain, a link sent to a work address, or a call.</li>
         <li><b>Prices.</b> The price shown before review is a projection. The price to pay is the one Divvit confirms when it approves the campaign, and it&apos;s charged in full, up front, through Stripe.</li>
         <li><b>Cafés that pass.</b> A café can decline a campaign. If one does, we&apos;ll offer you a comparable café nearby or refund that café&apos;s share.</li>
         <li><b>Your content.</b> You&apos;re responsible for your sleeve design and anything on it. You confirm you have the rights to the names, logos and images you use, and that the content is lawful and accurate. You let Divvit and your cafés use it to print the sleeves and run, show and report on the campaign.</li>

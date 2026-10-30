@@ -19,4 +19,10 @@
 #divvit-header .divvit-login { flex: 0 0 auto; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--text-secondary); white-space: nowrap;
   padding: 8px 10px; border-radius: 15px; transition: color .25s var(--ease-out); }
 #divvit-header .divvit-login:hover { color: var(--brand-primary) !important; }
-@media (max-width: 520px) { #divvit-header .divvit-login { display: none; } }
+@media (max-width: 520px) {
+  #divvit-header .divvit-login { display: none; }
+  /* phones: the island hugs the edges and trims its padding, so the logo and button stay exactly
+     where they were in the full-width bar instead of jumping inward as the page scrolls */
+  #divvit-header.island { left: 10px; right: 10px; top: 10px; height: 58px; border-radius: 18px; }
+  #divvit-header.island .dh-inner { padding: 0 15px; }
+}
